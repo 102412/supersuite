@@ -1,5 +1,5 @@
 body {
-  font-family: 'Segoe UI', sans-serif;
+  font-family: 'Roboto', sans-serif;
   margin: 0;
   background: #111;
   color: white;
@@ -14,7 +14,7 @@ body {
 }
 
 #demo-pass {
-  padding: 10px;
+  padding: 12px;
   font-size: 16px;
   margin-top: 10px;
   border-radius: 6px;
@@ -34,8 +34,8 @@ body {
   display: flex;
   justify-content: space-between;
   padding: 15px 30px;
-  backdrop-filter: blur(15px);
-  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(20px);
+  background: rgba(255,255,255,0.05);
   border-bottom: 1px solid rgba(255,255,255,0.2);
   position: sticky;
   top: 0;
@@ -46,17 +46,18 @@ body {
   position: fixed;
   left: 0;
   top: 60px;
-  width: 200px;
-  padding: 10px;
+  width: 250px;
+  padding: 15px;
   background: rgba(255,255,255,0.05);
   backdrop-filter: blur(20px);
   height: calc(100% - 60px);
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow-y: auto;
 }
 
-#templates button {
+#templates button, #blocks button {
   padding: 8px;
   border-radius: 6px;
   border: none;
@@ -65,35 +66,25 @@ body {
   color: white;
 }
 
-#templates button:hover { background: orange; }
+#templates button:hover, #blocks button:hover { background: orange; }
 
 main {
-  margin-left: 220px;
+  margin-left: 270px;
   padding: 20px;
   display: flex;
   gap: 20px;
 }
 
 #blocks {
-  width: 200px;
+  width: 250px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-#blocks button {
-  padding: 8px;
-  border-radius: 6px;
-  border: none;
-  background: rgba(255,255,255,0.1);
-  cursor: pointer;
-}
-
-#blocks button:hover { background: orange; }
-
 #preview {
   flex: 1;
-  height: 80vh;
+  height: 85vh;
   border-radius: 12px;
   overflow: hidden;
   border: 2px solid rgba(255,255,255,0.2);
