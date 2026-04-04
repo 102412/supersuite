@@ -2,10 +2,14 @@ const passwordInput = document.getElementById('demo-pass');
 const unlockBtn = document.getElementById('unlock-btn');
 const passwordScreen = document.getElementById('password-screen');
 const builderScreen = document.getElementById('builder-screen');
-
 const sitePreview = document.getElementById('site-preview');
 
 const demoPassword = 'SS26';
+
+let currentTemplate = 'glass';
+let selectedFont = 'Roboto';
+let selectedElement = null;
+let blocks = [];
 
 unlockBtn.onclick = () => {
   if (passwordInput.value === demoPassword) {
@@ -16,49 +20,56 @@ unlockBtn.onclick = () => {
   }
 };
 
-let currentTemplate = 'glass';
-let blocks = [];
-
 function setTemplate(template) {
   currentTemplate = template;
   updatePreview();
 }
 
+function updateSelectedFont(font) {
+  selectedFont = font;
+  if (selectedElement) {
+    selectedElement.style.fontFamily = font;
+  }
+}
+
+function updateSelectedStyle(styleProp, value) {
+  if (selectedElement) {
+    selectedElement.style[styleProp] = value;
+  }
+  updatePreview();
+}
+
 function addBlock(type) {
-  blocks.push({ type, content: `Editable ${type}` });
+  const id = `block-${blocks.length}`;
+  const block = { id, type, content: `Editable ${type}`, style: { color: '#fff', fontSize: '24px', fontFamily: selectedFont, backgroundColor: 'transparent' } };
+  blocks.push(block);
   updatePreview();
 }
 
 function updatePreview() {
   let html = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Generated Site</title>';
 
-  if(currentTemplate==='glass'){
-    html += `<style>body{background:#111;color:white;font-family:sans-serif;}section{backdrop-filter:blur(15px);background:rgba(255,255,255,0.1);padding:20px;margin:20px;border-radius:10px;} h1{color:orange;}</style>`;
-  } else if(currentTemplate==='classy'){
-    html += `<style>body{background:white;color:#222;font-family:serif;}h1{color:#222;} section{padding:30px;margin:20px;border-bottom:2px solid #ccc;}</style>`;
-  } else {
-    html += `<style>body{background:#222;color:white;font-family:sans-serif;} section{padding:20px;margin:20px;}</style>`;
-  }
+  html += `<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Montserrat:wght@400;700&display=swap" rel="stylesheet">`;
+  html += '</head><body style="margin:0;padding:0;">';
 
-  html += '</head><body>';
-
-  blocks.forEach(block=>{
-    if(block.type==='hero') html += `<section><h1 contenteditable='true'>${block.content}</h1></section>`;
-    if(block.type==='lead') html += `<section><form><input placeholder='Name'><input placeholder='Email'><button>Submit</button></form></section>`;
-    if(block.type==='testimonials') html += `<section><p>"Customer testimonial here"</p></section>`;
-    if(block.type==='services') html += `<section><ul><li>Service 1</li><li>Service 2</li></ul></section>`;
-    if(block.type==='cta') html += `<section><button>Call To Action</button></section>`;
+  blocks.forEach(block => {
+    html += `<section id='${block.id}' style='color:${block.style.color}; font-size:${block.style.fontSize}; font-family:${block.style.fontFamily}; background-color:${block.style.backgroundColor}; padding:20px; margin:20px; border-radius:12px;'>`;
+    if(block.type==='hero') html += `<h1 contenteditable='true'>${block.content}</h1>`;
+    if(block.type==='lead') html += `<form><input placeholder='Name'><input placeholder='Email'><button>Submit</button></form>`;
+    if(block.type==='testimonials') html += `<p contenteditable='true'>"Customer testimonial here"</p>`;
+    if(block.type==='services') html += `<ul><li contenteditable='true'>Service 1</li><li contenteditable='true'>Service 2</li></ul>`;
+    if(block.type==='cta') html += `<button contenteditable='true'>Call To Action</button>`;
+    html += `</section>`;
   });
 
   html += '</body></html>';
-
   sitePreview.srcdoc = html;
 }
 
 document.getElementById('generate-btn').onclick = () => {
   const htmlBlob = new Blob([sitePreview.srcdoc], {type:'text/html'});
-  const cssBlob = new Blob([`/* Custom CSS can go here */`], {type:'text/css'});
-  const jsBlob = new Blob([`/* Custom JS can go here */`], {type:'text/javascript'});
+  const cssBlob = new Blob([`/* User generated CSS can be added here */`], {type:'text/css'});
+  const jsBlob = new Blob([`/* User generated JS can be added here */`], {type:'text/javascript'});
 
   const aHTML = document.createElement('a');
   aHTML.href = URL.createObjectURL(htmlBlob);
