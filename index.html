@@ -1,1 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Supersuite Market-Ready Demo</title>
+<link rel="stylesheet" href="style.css">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Montserrat:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
 
+<!-- Password Gate -->
+<div id="password-screen">
+  <h2>Enter Demo Password</h2>
+  <input type="password" id="demo-pass" placeholder="Password">
+  <button id="unlock-btn">Enter</button>
+  <p id="pass-error" style="color:red;display:none;">Incorrect Password</p>
+</div>
+
+<!-- Builder Screen -->
+<div id="builder-screen" style="display:none;">
+<header>
+  <h1>Supersuite Builder</h1>
+  <button id="generate-btn">It’s Go Time</button>
+</header>
+
+<aside id="side-panel">
+  <section id="templates">
+    <h3>Template Styles</h3>
+    <button onclick="setTemplate('glass')">Ultra Modern Liquid Glass</button>
+    <button onclick="setTemplate('classy')">Classy Bold Scrollytelling</button>
+    <button onclick="setTemplate('custom')">Custom Bold CSS</button>
+  </section>
+
+  <section id="global-style">
+    <h3>Global Styles</h3>
+    <label>Primary Color <input type="color" id="primary-color" onchange="updateGlobalStyle('primaryColor', this.value)"></label>
+    <label>Secondary Color <input type="color" id="secondary-color" onchange="updateGlobalStyle('secondaryColor', this.value)"></label>
+    <label>Heading Font <select id="heading-font" onchange="updateGlobalStyle('headingFont', this.value)"><option value='Roboto'>Roboto</option><option value='Montserrat'>Montserrat</option><option value='Open Sans'>Open Sans</option></select></label>
+    <label>Body Font <select id="body-font" onchange="updateGlobalStyle('bodyFont', this.value)"><option value='Roboto'>Roboto</option><option value='Montserrat'>Montserrat</option><option value='Open Sans'>Open Sans</option></select></label>
+    <label>Button Style <select id='button-style' onchange="updateGlobalStyle('buttonStyle', this.value)"><option value='rounded'>Rounded</option><option value='square'>Square</option><option value='shadow'>Shadowed</option></select></label>
+  </section>
+
+  <section id="blocks">
+    <h3>Revenue Blocks</h3>
+    <button onclick="addBlock('hero')">Hero Section</button>
+    <button onclick="addBlock('lead')">Lead Form</button>
+    <button onclick="addBlock('testimonials')">Testimonials</button>
+    <button onclick="addBlock('services')">Services/Pricing</button>
+    <button onclick="addBlock('cta')">Call-to-Action</button>
+  </section>
+</aside>
+
+<main>
+  <section id="preview">
+    <iframe id="site-preview"></iframe>
+  </section>
+</main>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
