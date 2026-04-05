@@ -30,6 +30,8 @@ const state = {
   },
 };
 
+const STORAGE_KEY = 'supersuite-builder-state-v1';
+
 // ─── Undo / Redo ─────────────────────────────
 const history = [];
 let historyIndex = -1;
@@ -42,6 +44,7 @@ function saveHistory() {
   if (history.length > 80) history.shift();
   historyIndex = history.length - 1;
   updateUndoRedoBtns();
+  persistState();
 }
 
 function undo() {
@@ -82,6 +85,7 @@ function updateUndoRedoBtns() {
 }
 
 let blockIdCounter = 1;
+let lastGoodPreviewHTML = '';
 
 // ═══════════════════════════════════════════════
 //  PASSWORD GATE
@@ -117,7 +121,76 @@ function checkPassword() {
 // ═══════════════════════════════════════════════
 function initApp() {
   setupKeyboardShortcuts();
-  applyTemplate('glass', document.querySelector('.template-card.active'), false);
+
+  const restored = restorePersistedState();
+  if (restored) {
+    renderPreview();
+    updateLayersList();
+    updateStatusBar();
+    saveHistory();
+  } else {
+    applyTemplate('glass', document.querySelector('.template-card.active'), false);
+  }
+
+  applyAutomaticMobileSizing();
+}
+
+function applyAutomaticMobileSizing() {
+  const sizeButtons = document.querySelectorAll('.size-btn');
+  if (window.innerWidth <= 640 && sizeButtons[2]) {
+    setSize('mobile', sizeButtons[2]);
+    return;
+  }
+  if (window.innerWidth <= 1024 && sizeButtons[1]) {
+    setSize('tablet', sizeButtons[1]);
+  }
+}
+
+function persistState() {
+  try {
+    const snapshot = {
+      template: state.template,
+      blocks: state.blocks,
+      spacing: state.spacing,
+      customCSS: state.customCSS,
+      globalStyles: state.globalStyles,
+      blockIdCounter,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  } catch (err) {
+    console.warn('Persist state failed:', err);
+  }
+}
+
+let persistTimer = null;
+function schedulePersistState() {
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => persistState(), 180);
+}
+
+function restorePersistedState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+
+    const snap = JSON.parse(raw);
+    if (!snap || !Array.isArray(snap.blocks) || !snap.globalStyles) return false;
+
+    state.template = snap.template || 'glass';
+    state.blocks = snap.blocks;
+    state.spacing = snap.spacing || 'normal';
+    state.customCSS = snap.customCSS || '';
+    state.globalStyles = { ...state.globalStyles, ...snap.globalStyles };
+    blockIdCounter = Number.isFinite(snap.blockIdCounter) ? snap.blockIdCounter : blockIdCounter;
+
+    const cssInput = document.getElementById('custom-css-input');
+    if (cssInput) cssInput.value = state.customCSS;
+
+    return true;
+  } catch (err) {
+    console.warn('Restore state failed:', err);
+    return false;
+  }
 }
 
 function setupKeyboardShortcuts() {
@@ -144,7 +217,6 @@ function setTopTab(btn, tab) {
   document.querySelectorAll('.topbar-tab').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
 }
-
 function setSize(size, btn) {
   document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -857,20 +929,44 @@ function updateSpacing(val) {
   renderPreview(); saveHistory();
 }
 
+function sanitizeCustomCSS(css) {
+  return String(css || '')
+    .replace(/<\/style/gi, '<\\/style')
+    .replace(/<script/gi, '&lt;script');
+}
+
 function updateCustomCSS(val) {
-  state.customCSS = val;
+  state.customCSS = sanitizeCustomCSS(val);
   renderPreview();
+  schedulePersistState();
 }
 
 // ═══════════════════════════════════════════════
 //  RENDER PREVIEW
 // ═══════════════════════════════════════════════
 function renderPreview() {
-  const html = buildSiteHTML();
   const frame = document.getElementById('preview-frame');
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open(); doc.write(html); doc.close();
-  document.getElementById('empty-state').style.display = state.blocks.length ? 'none' : '';
+  if (!frame) return;
+
+  try {
+    const html = buildSiteHTML();
+    const doc = frame.contentDocument || frame.contentWindow.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
+    lastGoodPreviewHTML = html;
+    document.getElementById('empty-state').style.display = state.blocks.length ? 'none' : '';
+    schedulePersistState();
+  } catch (err) {
+    console.error('Preview render failed:', err);
+    if (lastGoodPreviewHTML) {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      doc.open();
+      doc.write(lastGoodPreviewHTML);
+      doc.close();
+    }
+    showToast('Preview update failed. Last good state restored.');
+  }
 }
 
 // ═══════════════════════════════════════════════
@@ -1101,7 +1197,7 @@ function renderBlock(block, sp) {
     <div class="ss-subheading ss-animate" style="margin:0 auto;animation-delay:.08s">${esc2(block.subheading)}</div>
     <form class="ss-form ss-lead-form ss-animate" style="animation-delay:.15s">
       <div class="ss-form-fields">
-        ${block.fields.map(f => `<input type="text" placeholder="${esc2(f)}" required>`).join('')}
+        ${block.fields.map(f => `<input type="text" placeholder="${escAttr(f)}" required>`).join('')}
         <button type="submit" class="ss-btn" style="width:100%">${esc2(block.btnText)}</button>
       </div>
       <div class="ss-form-success">${esc2(block.successMsg)}</div>
@@ -1153,7 +1249,7 @@ function renderBlock(block, sp) {
           ${p.badge ? `<div class="ss-plan-badge">${esc2(p.badge)}</div>` : ''}
           <div class="ss-plan-name">${esc2(p.name)}</div>
           <div style="margin-bottom:8px">
-            <span class="ss-plan-price" data-price-mo="${esc2(p.price)}" data-price-annual="${esc2(p.priceAnnual)}">${esc2(p.price)}</span>
+            <span class="ss-plan-price" data-price-mo="${escAttr(p.price)}" data-price-annual="${escAttr(p.priceAnnual)}">${esc2(p.price)}</span>
             <span class="ss-plan-period">${esc2(p.period)}</span>
           </div>
           <ul class="ss-plan-features">
@@ -1200,6 +1296,9 @@ function renderBlock(block, sp) {
 
 function esc2(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function escAttr(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 function esc(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
