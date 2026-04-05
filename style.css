@@ -727,3 +727,83 @@ select.style-select {
   to { opacity: 1; transform: translateY(0); }
 }
 .block-order-item { animation: blockEntry 0.2s ease; }
+
+/* MOBILE OPTIMIZATION */
+@media (max-width: 980px) {
+  body,
+  #app {
+    height: 100dvh;
+  }
+
+  .gate-box {
+    width: min(380px, 92vw);
+    padding: 28px;
+  }
+
+  .topbar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .topbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .workspace {
+    flex-direction: column;
+  }
+
+  .left-panel {
+    width: 100%;
+    max-height: 38vh;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .preview-area {
+    padding: 10px;
+  }
+
+  .preview-wrap {
+    border-radius: 10px;
+  }
+
+  .right-panel {
+    width: 100%;
+    max-height: 42vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+  }
+
+  .right-panel.hidden {
+    display: none;
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .topbar-logo,
+  .topbar-sep {
+    display: none;
+  }
+
+  .topbar {
+    gap: 6px;
+    padding: 0 10px;
+  }
+
+  .topbar-tab,
+  .topbar-export-btn,
+  .icon-btn,
+  .size-btn {
+    flex-shrink: 0;
+  }
+
+  .panel-content,
+  .right-panel-content {
+    padding: 10px;
+  }
+}
+
