@@ -3,61 +3,239 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Supersuite Market-Ready Demo</title>
+<title>Supersuite — Website Builder</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&family=Montserrat:wght@400;700&family=Open+Sans:wght@400;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
-<!-- Password Gate -->
-<div id="password-screen">
-  <h2>Enter Demo Password</h2>
-  <input type="password" id="demo-pass" placeholder="Password">
-  <button id="unlock-btn">Enter</button>
-  <p id="pass-error" style="color:red;display:none;">Incorrect Password</p>
+<!-- PASSWORD GATE -->
+<div id="gate">
+  <div class="gate-logo">Supersuite</div>
+  <div class="gate-sub">Website Builder · Demo Access</div>
+  <div class="gate-box">
+    <div class="gate-label">Access Code</div>
+    <input id="gate-pw" class="gate-input" type="password" placeholder="Enter password" autocomplete="off">
+    <button class="gate-btn" onclick="checkPassword()">Enter Builder →</button>
+    <div class="gate-error" id="gate-err">Incorrect password. Hint: SS26</div>
+  </div>
 </div>
 
-<!-- Builder Screen -->
-<div id="builder-screen" style="display:none;">
-<header>
-  <h1>Supersuite Builder</h1>
-  <button id="generate-btn">It’s Go Time</button>
-</header>
+<!-- MAIN APP -->
+<div id="app">
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-logo">Supersuite</div>
+    <div class="topbar-sep"></div>
+    <button class="topbar-tab active" onclick="setTopTab(this, 'build')">Build</button>
+    <button class="topbar-tab" onclick="setTopTab(this, 'pages')">Pages</button>
+    <button class="topbar-tab" onclick="setTopTab(this, 'preview')">Preview</button>
+    <div class="topbar-spacer"></div>
+    <div class="preview-size-btns">
+      <button class="size-btn active" onclick="setSize('desktop', this)" title="Desktop">🖥</button>
+      <button class="size-btn" onclick="setSize('tablet', this)" title="Tablet">📱</button>
+      <button class="size-btn" onclick="setSize('mobile', this)" title="Mobile">📲</button>
+    </div>
+    <div class="topbar-sep"></div>
+    <button class="topbar-export-btn" onclick="exportSite()">⬇ Export HTML</button>
+  </div>
 
-<aside id="side-panel">
-  <section id="templates">
-    <h3>Template Styles</h3>
-    <button onclick="setTemplate('glass')">Ultra Modern Liquid Glass</button>
-    <button onclick="setTemplate('classy')">Classy Bold Scrollytelling</button>
-    <button onclick="setTemplate('custom')">Custom Bold CSS</button>
-  </section>
+  <!-- WORKSPACE -->
+  <div class="workspace">
+    <!-- LEFT PANEL -->
+    <div class="left-panel">
+      <div class="panel-tabs">
+        <button class="panel-tab active" onclick="setPanelTab(this, 'templates')">Templates</button>
+        <button class="panel-tab" onclick="setPanelTab(this, 'blocks')">Blocks</button>
+        <button class="panel-tab" onclick="setPanelTab(this, 'styles')">Styles</button>
+        <button class="panel-tab" onclick="setPanelTab(this, 'layers')">Layers</button>
+      </div>
 
-  <section id="global-style">
-    <h3>Global Styles</h3>
-    <label>Primary Color <input type="color" id="primary-color" onchange="updateGlobalStyle('primaryColor', this.value)"></label>
-    <label>Secondary Color <input type="color" id="secondary-color" onchange="updateGlobalStyle('secondaryColor', this.value)"></label>
-    <label>Heading Font <select id="heading-font" onchange="updateGlobalStyle('headingFont', this.value)"><option value='Roboto'>Roboto</option><option value='Montserrat'>Montserrat</option><option value='Open Sans'>Open Sans</option></select></label>
-    <label>Body Font <select id="body-font" onchange="updateGlobalStyle('bodyFont', this.value)"><option value='Roboto'>Roboto</option><option value='Montserrat'>Montserrat</option><option value='Open Sans'>Open Sans</option></select></label>
-    <label>Button Style <select id='button-style' onchange="updateGlobalStyle('buttonStyle', this.value)"><option value='rounded'>Rounded</option><option value='square'>Square</option><option value='shadow'>Shadowed</option></select></label>
-  </section>
+      <!-- TEMPLATES TAB -->
+      <div class="panel-content" id="tab-templates">
+        <div style="margin-bottom:12px;">
+          <div class="section-header">Starter Templates</div>
+        </div>
 
-  <section id="blocks">
-    <h3>Revenue Blocks</h3>
-    <button onclick="addBlock('hero')">Hero Section</button>
-    <button onclick="addBlock('lead')">Lead Form</button>
-    <button onclick="addBlock('testimonials')">Testimonials</button>
-    <button onclick="addBlock('services')">Services/Pricing</button>
-    <button onclick="addBlock('cta')">Call-to-Action</button>
-  </section>
-</aside>
+        <div class="template-card active" onclick="applyTemplate('glass', this)">
+          <div class="template-thumb template-thumb-glass">
+            <span style="font-family:'Syne',sans-serif;font-weight:800;color:white;font-size:22px;letter-spacing:-1px;text-shadow:0 2px 20px rgba(255,255,255,0.5);">GLASS</span>
+          </div>
+          <div class="template-info">
+            <div class="template-name">Liquid Glass</div>
+            <div class="template-desc">Ultra-modern glassmorphism with blur, white/grey palette</div>
+          </div>
+        </div>
 
-<main>
-  <section id="preview">
-    <iframe id="site-preview"></iframe>
-  </section>
-</main>
+        <div class="template-card" onclick="applyTemplate('bold', this)">
+          <div class="template-thumb template-thumb-bold">
+            <span style="font-family:'Syne',sans-serif;font-weight:800;color:white;font-size:22px;letter-spacing:-1px;">BOLD</span>
+          </div>
+          <div class="template-info">
+            <div class="template-name">Classy Bold</div>
+            <div class="template-desc">Dark minimal with scrollytelling animations</div>
+          </div>
+        </div>
 
+        <div class="template-card" onclick="applyTemplate('custom', this)">
+          <div class="template-thumb template-thumb-custom">
+            <span style="font-family:'Syne',sans-serif;font-weight:800;color:white;font-size:22px;letter-spacing:-1px;">VIVID</span>
+          </div>
+          <div class="template-info">
+            <div class="template-name">Vivid Custom</div>
+            <div class="template-desc">Vibrant gradients, bold colors, your CSS snippet</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BLOCKS TAB -->
+      <div class="panel-content" id="tab-blocks" style="display:none">
+        <div class="section-header">Revenue Blocks</div>
+
+        <div class="block-item" onclick="addBlock('hero')">
+          <div class="block-icon">🚀</div>
+          <div>
+            <div class="block-name">Hero Section</div>
+            <div class="block-desc">Heading, subheading, CTA button</div>
+          </div>
+        </div>
+
+        <div class="block-item" onclick="addBlock('lead')">
+          <div class="block-icon">📬</div>
+          <div>
+            <div class="block-name">Lead Form</div>
+            <div class="block-desc">Email capture with submit action</div>
+          </div>
+        </div>
+
+        <div class="block-item" onclick="addBlock('testimonials')">
+          <div class="block-icon">💬</div>
+          <div>
+            <div class="block-name">Testimonials</div>
+            <div class="block-desc">Review cards with avatars and text</div>
+          </div>
+        </div>
+
+        <div class="block-item" onclick="addBlock('pricing')">
+          <div class="block-icon">💎</div>
+          <div>
+            <div class="block-name">Services / Pricing</div>
+            <div class="block-desc">Feature icons and tiered pricing</div>
+          </div>
+        </div>
+
+        <div class="block-item" onclick="addBlock('cta')">
+          <div class="block-icon">⚡</div>
+          <div>
+            <div class="block-name">CTA Section</div>
+            <div class="block-desc">Big call-to-action with hover effects</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- STYLES TAB -->
+      <div class="panel-content" id="tab-styles" style="display:none">
+        <div class="style-section">
+          <div class="style-section-title">Brand Colors</div>
+          <div class="color-row">
+            <span class="color-label">Primary</span>
+            <div class="color-swatch" id="swatch-primary" style="background:#6366f1">
+              <input type="color" value="#6366f1" oninput="updateGlobalColor('primary', this.value)" onchange="updateGlobalColor('primary', this.value)">
+            </div>
+          </div>
+          <div class="color-row">
+            <span class="color-label">Secondary</span>
+            <div class="color-swatch" id="swatch-secondary" style="background:#ec4899">
+              <input type="color" value="#ec4899" oninput="updateGlobalColor('secondary', this.value)" onchange="updateGlobalColor('secondary', this.value)">
+            </div>
+          </div>
+          <div class="color-row">
+            <span class="color-label">Background</span>
+            <div class="color-swatch" id="swatch-bg" style="background:#ffffff">
+              <input type="color" value="#ffffff" oninput="updateGlobalColor('bg', this.value)" onchange="updateGlobalColor('bg', this.value)">
+            </div>
+          </div>
+          <div class="color-row">
+            <span class="color-label">Text</span>
+            <div class="color-swatch" id="swatch-text" style="background:#111827">
+              <input type="color" value="#111827" oninput="updateGlobalColor('textColor', this.value)" onchange="updateGlobalColor('textColor', this.value)">
+            </div>
+          </div>
+        </div>
+
+        <div class="style-section">
+          <div class="style-section-title">Typography</div>
+          <div class="prop-label" style="margin-bottom:6px;font-size:12px;color:var(--text2)">Heading Font</div>
+          <select class="style-select" onchange="updateGlobalFont('heading', this.value)">
+            <option value="'Syne', sans-serif">Syne (Modern)</option>
+            <option value="'Playfair Display', serif">Playfair Display (Elegant)</option>
+            <option value="'Space Grotesk', sans-serif">Space Grotesk (Tech)</option>
+            <option value="'Bebas Neue', cursive">Bebas Neue (Bold)</option>
+            <option value="Georgia, serif">Georgia (Classic)</option>
+          </select>
+          <div class="prop-label" style="margin-bottom:6px;font-size:12px;color:var(--text2)">Body Font</div>
+          <select class="style-select" onchange="updateGlobalFont('body', this.value)">
+            <option value="'DM Sans', sans-serif">DM Sans (Clean)</option>
+            <option value="'Inter', sans-serif">Inter (Neutral)</option>
+            <option value="'Lato', sans-serif">Lato (Friendly)</option>
+            <option value="Georgia, serif">Georgia (Editorial)</option>
+          </select>
+        </div>
+
+        <div class="style-section">
+          <div class="style-section-title">Button Style</div>
+          <div class="btn-style-row">
+            <div class="btn-style-opt active" onclick="updateBtnStyle('rounded', this)">Rounded</div>
+            <div class="btn-style-opt" onclick="updateBtnStyle('square', this)">Square</div>
+            <div class="btn-style-opt" onclick="updateBtnStyle('pill', this)">Pill</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAYERS TAB -->
+      <div class="panel-content" id="tab-layers" style="display:none">
+        <div class="section-header">
+          Page Layers
+          <span style="color:var(--text3);font-weight:400;text-transform:none;letter-spacing:0;font-size:11px" id="layer-count">0 blocks</span>
+        </div>
+        <div id="layers-list"></div>
+        <div id="layers-empty" style="text-align:center;color:var(--text3);font-size:12px;margin-top:40px">
+          No blocks yet.<br>Add blocks from the Blocks tab.
+        </div>
+      </div>
+    </div>
+
+    <!-- PREVIEW AREA -->
+    <div class="preview-area" id="preview-area">
+      <div id="empty-state" class="empty-preview">
+        <div class="empty-preview-icon">🎨</div>
+        <div class="empty-preview-text">Select a template or add blocks to start building</div>
+      </div>
+      <div class="preview-wrap" id="preview-wrap">
+        <iframe id="preview-frame" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+      </div>
+    </div>
+
+    <!-- RIGHT PANEL (Block properties) -->
+    <div class="right-panel hidden" id="right-panel">
+      <div class="right-panel-header">
+        <div class="right-panel-title" id="rp-title">Block Properties</div>
+        <button class="close-btn" onclick="closeRightPanel()">✕</button>
+      </div>
+      <div class="right-panel-content" id="right-panel-content"></div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <div class="status-item"><div class="status-dot"></div> Live Preview</div>
+    <div class="status-item" id="status-blocks">0 blocks</div>
+    <div class="status-item" id="status-template">Template: Liquid Glass</div>
+    <div class="status-item" style="margin-left:auto;color:var(--accent2);cursor:pointer" onclick="showToast('Phase 0+1 complete ✓ Phase 2 coming soon!')">Supersuite v0.2</div>
+  </div>
 </div>
+
+<div class="toast" id="toast"></div>
 
 <script src="script.js"></script>
 </body>
