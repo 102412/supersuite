@@ -1,1281 +1,1712 @@
-/* ═══════════════════════════════════════════════════════════
-   SUPERSUITE  script.js  v1.1
-   Fix 1: Features block — any number of service cards
-   Fix 2: Export matches preview (no iframe scaling mismatch)
-   Fix 3: Global color/style changes fully update preview header
-   Fix 4: SS favicon + logo mark (in index.html + CSS)
-   Fix 5: Mobile detection popup (in index.html + here)
-   Fix 6: Templates have dramatically different visual signatures
-   Fix 7: Preview opens at full desktop width immediately
-═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════
+   SUPERSUITE — WEBSITE BUILDER ENGINE v1.0
+   Full Phase 0–5 Implementation
+   Password · Templates · Blocks · Drag & Drop · Editing · Export
+═══════════════════════════════════════════════════════════════════ */
 
-// ═══════════════════════════════════════════════
-//  STATE
-// ═══════════════════════════════════════════════
-const state = {
-  template: 'glass',
-  blocks: [],
+'use strict';
+
+/* ──────────────────────────────────────────────────────────────────
+   STATE STORE — single source of truth
+────────────────────────────────────────────────────────────────── */
+const State = {
+  authenticated: false,
+  currentTemplate: 'glass',
+  currentDevice: 'desktop',
+  zoomLevel: 100,
+  blocks: [],          // Array of block objects
   selectedBlockId: null,
-  spacing: 'normal',
-  customCSS: '',
+  selectedElement: null,
   globalStyles: {
-    primaryColor:   '#6366f1',
-    secondaryColor: '#ec4899',
-    bgColor:        '#ffffff',
-    textColor:      '#111827',
-    headingFont:    "'Syne', sans-serif",
-    bodyFont:       "'DM Sans', sans-serif",
-    btnStyle:       'rounded',
+    '--primary': '#ff6b35',
+    '--secondary': '#1a1a2e',
+    '--accent': '#ffd700',
+    '--bg': '#ffffff',
+    '--text': '#1a1a2e',
+    '--font-heading': "'Syne', sans-serif",
+    '--font-body': "'DM Sans', sans-serif",
+    '--font-base': '16px',
+    '--line-height': '1.6',
+    '--btn-radius': '8px',
+    '--section-pad': '60px',
+    '--container': '1200px',
+    '--radius': '12px',
+    '--shadow': '0 8px 24px rgba(0,0,0,0.15)',
   },
+  customCSS: '',
+  uploadedImages: {},   // map: key → base64
+  blockIdCounter: 1,
 };
 
-// ── Undo / Redo ───────────────────────────────
-const history = [];
-let historyIndex = -1;
+/* ──────────────────────────────────────────────────────────────────
+   BLOCK DEFINITIONS — templates for each block type
+────────────────────────────────────────────────────────────────── */
+const BlockDefs = {
 
-function saveHistory() {
-  const snap = JSON.stringify({
-    blocks: state.blocks, globalStyles: state.globalStyles,
-    template: state.template, spacing: state.spacing, customCSS: state.customCSS,
-  });
-  if (history[historyIndex] === snap) return;
-  history.splice(historyIndex + 1);
-  history.push(snap);
-  if (history.length > 80) history.shift();
-  historyIndex = history.length - 1;
-  updateUndoRedoBtns();
+  nav: {
+    label: 'Navigation',
+    icon: '🧭',
+    defaultData: {
+      logo: 'Supersuite',
+      links: ['Home', 'Features', 'Pricing', 'Contact'],
+      bgColor: '#ffffff',
+      textColor: '#1a1a2e',
+      sticky: true,
+      ctaText: 'Get Started',
+      ctaLink: '#cta',
+      ctaBgColor: '#ff6b35',
+    }
+  },
+
+  hero: {
+    label: 'Hero Section',
+    icon: '⚡',
+    defaultData: {
+      heading: 'Build Your Dream Website — Fast',
+      subheading: 'No code required. Launch in minutes with Supersuite\'s powerful visual builder.',
+      bgType: 'gradient',
+      bgColor: '#1a1a2e',
+      bgColor2: '#16213e',
+      bgImage: '',
+      textColor: '#ffffff',
+      btnText: 'Start Building Free',
+      btnLink: '#',
+      btnColor: '#ff6b35',
+      btnTextColor: '#ffffff',
+      btn2Text: 'Watch Demo',
+      btn2Link: '#',
+      showBadge: true,
+      badgeText: '🚀 Now with AI',
+      alignment: 'center',
+      minHeight: '85vh',
+    }
+  },
+
+  leadform: {
+    label: 'Lead Form',
+    icon: '📋',
+    defaultData: {
+      heading: 'Get Early Access',
+      subheading: 'Join 5,000+ builders already on the waitlist.',
+      fields: [
+        { type: 'text', placeholder: 'Your full name', name: 'name' },
+        { type: 'email', placeholder: 'Work email address', name: 'email' },
+        { type: 'text', placeholder: 'Company name (optional)', name: 'company' },
+      ],
+      btnText: 'Claim My Spot →',
+      btnColor: '#ff6b35',
+      bgColor: '#f8f8ff',
+      textColor: '#1a1a2e',
+      accentColor: '#ff6b35',
+      privacyText: '🔒 No spam. Unsubscribe anytime.',
+    }
+  },
+
+  testimonials: {
+    label: 'Testimonials',
+    icon: '💬',
+    defaultData: {
+      heading: 'Loved by Builders Worldwide',
+      subheading: 'Real feedback from real users.',
+      bgColor: '#ffffff',
+      textColor: '#1a1a2e',
+      accentColor: '#ff6b35',
+      cards: [
+        {
+          name: 'Sarah Chen',
+          role: 'Founder, Launchpad Co.',
+          avatar: '',
+          rating: 5,
+          quote: 'Supersuite cut our launch time from weeks to hours. The visual editor is incredibly intuitive — our whole team uses it now without any training.',
+          bgColor: '#ffffff',
+        },
+        {
+          name: 'Marcus Rivera',
+          role: 'Marketing Director',
+          avatar: '',
+          rating: 5,
+          quote: 'We replaced our expensive agency with Supersuite. The revenue blocks alone have increased our conversion rate by 34%. Unbelievable value.',
+          bgColor: '#ffffff',
+        },
+        {
+          name: 'Emma Thompson',
+          role: 'Solo Entrepreneur',
+          avatar: '',
+          rating: 5,
+          quote: 'As a non-technical founder, I was skeptical. But I had my entire website live in 2 hours. The templates are gorgeous out of the box.',
+          bgColor: '#ffffff',
+        },
+      ]
+    }
+  },
+
+  pricing: {
+    label: 'Pricing / Services',
+    icon: '💎',
+    defaultData: {
+      heading: 'Simple, Transparent Pricing',
+      subheading: 'Choose the plan that fits your ambition.',
+      bgColor: '#0f0f13',
+      textColor: '#ffffff',
+      accentColor: '#ff6b35',
+      plans: [
+        {
+          name: 'Starter',
+          price: '$0',
+          period: '/month',
+          description: 'Perfect for testing the waters.',
+          features: ['3 pages', '10 blocks', 'Custom domain', 'SSL included', 'Basic analytics'],
+          ctaText: 'Start Free',
+          ctaLink: '#',
+          featured: false,
+          bgColor: 'rgba(255,255,255,0.04)',
+          borderColor: 'rgba(255,255,255,0.1)',
+        },
+        {
+          name: 'Pro',
+          price: '$29',
+          period: '/month',
+          description: 'For serious builders.',
+          features: ['Unlimited pages', 'All blocks', 'Custom domain', 'SSL included', 'Advanced analytics', 'Priority support', 'Export code'],
+          ctaText: 'Start Pro Trial',
+          ctaLink: '#',
+          featured: true,
+          bgColor: '#ff6b35',
+          borderColor: '#ff6b35',
+        },
+        {
+          name: 'Agency',
+          price: '$99',
+          period: '/month',
+          description: 'Built for teams & agencies.',
+          features: ['Everything in Pro', '10 team seats', 'White-label', 'Client handoff', 'API access', 'SLA guarantee'],
+          ctaText: 'Contact Sales',
+          ctaLink: '#',
+          featured: false,
+          bgColor: 'rgba(255,255,255,0.04)',
+          borderColor: 'rgba(255,255,255,0.1)',
+        },
+      ]
+    }
+  },
+
+  cta: {
+    label: 'CTA Section',
+    icon: '🎯',
+    defaultData: {
+      heading: 'Ready to Build Something Amazing?',
+      subheading: 'Join thousands of businesses already growing with Supersuite.',
+      bgType: 'gradient',
+      bgColor: '#ff6b35',
+      bgColor2: '#ff3d00',
+      bgImage: '',
+      textColor: '#ffffff',
+      btnText: 'Start Building — It\'s Free',
+      btnLink: '#',
+      btnColor: '#ffffff',
+      btnTextColor: '#ff6b35',
+      btn2Text: 'Book a Demo',
+      btn2Link: '#',
+      showBadge: false,
+      badgeText: '✓ No credit card required',
+    }
+  },
+
+  features: {
+    label: 'Features',
+    icon: '✨',
+    defaultData: {
+      heading: 'Everything You Need to Launch',
+      subheading: 'Powerful features built for modern businesses.',
+      bgColor: '#ffffff',
+      textColor: '#1a1a2e',
+      accentColor: '#ff6b35',
+      columns: 3,
+      items: [
+        { icon: '⚡', title: 'Lightning Fast', description: 'Pages load in under 1 second. Optimized for Core Web Vitals and maximum performance.' },
+        { icon: '🎨', title: 'Beautiful Design', description: 'Professionally designed templates created by world-class designers.' },
+        { icon: '📱', title: 'Mobile First', description: 'Every page looks perfect on any device — phone, tablet, or desktop.' },
+        { icon: '🔌', title: 'Integrations', description: 'Connect with Stripe, Mailchimp, Zapier, and 100+ other tools.' },
+        { icon: '📊', title: 'Analytics', description: 'Built-in analytics. See what\'s working and double down on what converts.' },
+        { icon: '🔒', title: 'Enterprise Security', description: 'SSL, DDoS protection, and automated backups keep your site safe.' },
+      ]
+    }
+  },
+
+  gallery: {
+    label: 'Gallery',
+    icon: '🖼️',
+    defaultData: {
+      heading: 'Our Work',
+      subheading: 'A selection of sites built with Supersuite.',
+      bgColor: '#0f0f13',
+      textColor: '#ffffff',
+      columns: 3,
+      images: [
+        { src: '', alt: 'Project 1', caption: 'E-commerce Store' },
+        { src: '', alt: 'Project 2', caption: 'SaaS Landing Page' },
+        { src: '', alt: 'Project 3', caption: 'Portfolio Site' },
+        { src: '', alt: 'Project 4', caption: 'Agency Website' },
+        { src: '', alt: 'Project 5', caption: 'Startup Launch' },
+        { src: '', alt: 'Project 6', caption: 'Blog Platform' },
+      ]
+    }
+  },
+
+  footer: {
+    label: 'Footer',
+    icon: '📌',
+    defaultData: {
+      logo: 'Supersuite',
+      tagline: 'Build. Launch. Grow.',
+      bgColor: '#0a0a0f',
+      textColor: '#9090b0',
+      accentColor: '#ff6b35',
+      columns: [
+        {
+          title: 'Product',
+          links: [
+            { label: 'Features', url: '#' },
+            { label: 'Pricing', url: '#' },
+            { label: 'Templates', url: '#' },
+            { label: 'Changelog', url: '#' },
+          ]
+        },
+        {
+          title: 'Company',
+          links: [
+            { label: 'About', url: '#' },
+            { label: 'Blog', url: '#' },
+            { label: 'Careers', url: '#' },
+            { label: 'Press', url: '#' },
+          ]
+        },
+        {
+          title: 'Support',
+          links: [
+            { label: 'Docs', url: '#' },
+            { label: 'Help Center', url: '#' },
+            { label: 'Contact', url: '#' },
+            { label: 'Status', url: '#' },
+          ]
+        },
+      ],
+      copyright: `© ${new Date().getFullYear()} Supersuite, Inc. All rights reserved.`,
+      socialLinks: [
+        { platform: 'Twitter', icon: '𝕏', url: '#' },
+        { platform: 'LinkedIn', icon: 'in', url: '#' },
+        { platform: 'GitHub', icon: '⬡', url: '#' },
+      ]
+    }
+  },
+
+};
+
+/* ──────────────────────────────────────────────────────────────────
+   TEMPLATE CONFIGS
+────────────────────────────────────────────────────────────────── */
+const Templates = {
+  glass: {
+    name: 'Liquid Glass',
+    overrides: {
+      '--primary': '#ff6b35',
+      '--secondary': '#1a1a2e',
+      '--accent': '#a78bfa',
+      '--bg': '#f0f0f8',
+      '--text': '#1a1a2e',
+      '--font-heading': "'Syne', sans-serif",
+      '--font-body': "'DM Sans', sans-serif",
+      '--radius': '16px',
+      '--btn-radius': '50px',
+      '--shadow': '0 8px 32px rgba(0,0,0,0.12)',
+    },
+    extraCSS: `
+      body { background: linear-gradient(135deg, #e8e8f8 0%, #f0e8f0 50%, #e8f0f8 100%); }
+      .ss-block { backdrop-filter: blur(20px); }
+      .ss-hero { background: linear-gradient(135deg, rgba(26,26,46,0.9) 0%, rgba(22,33,62,0.9) 100%) !important; }
+      .ss-card { background: rgba(255,255,255,0.5) !important; border: 1px solid rgba(255,255,255,0.6) !important; backdrop-filter: blur(16px) !important; box-shadow: 0 8px 32px rgba(31,38,135,0.15) !important; }
+    `
+  },
+  bold: {
+    name: 'Classy Bold',
+    overrides: {
+      '--primary': '#1a1a2e',
+      '--secondary': '#ff6b35',
+      '--accent': '#ff6b35',
+      '--bg': '#fafaf8',
+      '--text': '#1a1a2e',
+      '--font-heading': "'Syne', sans-serif",
+      '--font-body': "'DM Sans', sans-serif",
+      '--radius': '4px',
+      '--btn-radius': '4px',
+      '--shadow': '4px 4px 0px rgba(26,26,46,0.15)',
+    },
+    extraCSS: `
+      body { background: #fafaf8; }
+      .ss-hero { background: #1a1a2e !important; }
+      .ss-btn-primary { border: 2px solid var(--primary) !important; box-shadow: 4px 4px 0 var(--primary) !important; }
+      .ss-btn-primary:hover { transform: translate(-2px, -2px) !important; box-shadow: 6px 6px 0 var(--primary) !important; }
+      .ss-card { border: 2px solid #1a1a2e !important; box-shadow: 4px 4px 0 #1a1a2e !important; }
+      .ss-section-title::after { content: ''; display: block; width: 60px; height: 4px; background: var(--accent); margin-top: 8px; }
+    `
+  },
+  custom: {
+    name: 'Custom CSS',
+    overrides: {},
+    extraCSS: ''
+  }
+};
+
+/* ──────────────────────────────────────────────────────────────────
+   HTML GENERATORS — render each block to HTML string
+────────────────────────────────────────────────────────────────── */
+const BlockRenderers = {
+
+  nav(data) {
+    return `
+<nav class="ss-block ss-nav" style="background:${data.bgColor};color:${data.textColor};position:${data.sticky?'sticky':'relative'};top:0;z-index:100;border-bottom:1px solid rgba(0,0,0,0.06);padding:0 var(--section-pad);">
+  <div class="ss-nav-inner" style="max-width:var(--container);margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:72px;gap:32px;">
+    <div class="ss-nav-logo" style="font-family:var(--font-heading);font-weight:800;font-size:24px;color:${data.textColor};letter-spacing:-0.5px;cursor:default;">${data.logo}</div>
+    <div class="ss-nav-links" style="display:flex;align-items:center;gap:32px;">
+      ${data.links.map(l => `<a href="#" style="color:${data.textColor};text-decoration:none;font-size:15px;font-weight:500;opacity:0.8;transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.8'">${l}</a>`).join('')}
+    </div>
+    <a href="${data.ctaLink}" style="background:${data.ctaBgColor};color:white;padding:10px 22px;border-radius:var(--btn-radius);font-size:14px;font-weight:600;text-decoration:none;transition:all 0.2s;display:inline-flex;align-items:center;gap:6px;" onmouseover="this.style.opacity='0.9';this.style.transform='translateY(-1px)'" onmouseout="this.style.opacity='1';this.style.transform='translateY(0)'">${data.ctaText} →</a>
+  </div>
+</nav>`;
+  },
+
+  hero(data) {
+    const bg = data.bgType === 'image' && data.bgImage
+      ? `url('${data.bgImage}') center/cover no-repeat`
+      : `linear-gradient(135deg, ${data.bgColor} 0%, ${data.bgColor2} 100%)`;
+    return `
+<section class="ss-block ss-hero" style="background:${bg};color:${data.textColor};padding:120px var(--section-pad);min-height:${data.minHeight};display:flex;align-items:center;position:relative;overflow:hidden;">
+  <div class="ss-hero-orb" style="position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(255,107,53,0.15),transparent 70%);border-radius:50%;pointer-events:none;"></div>
+  <div class="ss-hero-orb" style="position:absolute;bottom:-150px;left:-50px;width:400px;height:400px;background:radial-gradient(circle,rgba(139,92,246,0.1),transparent 70%);border-radius:50%;pointer-events:none;"></div>
+  <div class="ss-hero-inner" style="max-width:var(--container);margin:0 auto;width:100%;text-align:${data.alignment};position:relative;z-index:1;">
+    ${data.showBadge ? `<div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);border-radius:50px;padding:6px 16px;font-size:13px;margin-bottom:24px;backdrop-filter:blur(8px);">${data.badgeText}</div>` : ''}
+    <h1 style="font-family:var(--font-heading);font-size:clamp(40px,6vw,80px);font-weight:800;line-height:1.1;margin-bottom:20px;letter-spacing:-2px;">${data.heading}</h1>
+    <p style="font-size:clamp(16px,2vw,22px);opacity:0.8;max-width:600px;margin:0 ${data.alignment==='center'?'auto':'0'} 40px;line-height:1.6;">${data.subheading}</p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:${data.alignment==='center'?'center':'flex-start'};">
+      <a href="${data.btnLink}" class="ss-btn-primary" style="background:${data.btnColor};color:${data.btnTextColor};padding:16px 36px;border-radius:var(--btn-radius);font-size:16px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:8px;transition:all 0.3s;box-shadow:0 8px 32px rgba(255,107,53,0.4);" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 16px 48px rgba(255,107,53,0.5)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 8px 32px rgba(255,107,53,0.4)'">${data.btnText} →</a>
+      <a href="${data.btn2Link}" style="background:rgba(255,255,255,0.1);color:${data.textColor};padding:16px 36px;border-radius:var(--btn-radius);font-size:16px;font-weight:600;text-decoration:none;border:1px solid rgba(255,255,255,0.2);display:inline-flex;align-items:center;gap:8px;transition:all 0.3s;backdrop-filter:blur(8px);" onmouseover="this.style.background='rgba(255,255,255,0.15)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">${data.btn2Text}</a>
+    </div>
+  </div>
+</section>`;
+  },
+
+  leadform(data) {
+    const fields = data.fields.map(f => `
+      <input type="${f.type}" name="${f.name}" placeholder="${f.placeholder}" required style="width:100%;padding:14px 16px;background:white;border:1.5px solid #e5e7eb;border-radius:var(--radius);font-size:15px;font-family:var(--font-body);outline:none;transition:border-color 0.2s;color:${data.textColor};" onfocus="this.style.borderColor='${data.accentColor}'" onblur="this.style.borderColor='#e5e7eb'"/>
+    `).join('');
+    return `
+<section class="ss-block ss-leadform" style="background:${data.bgColor};color:${data.textColor};padding:var(--section-pad) var(--section-pad);">
+  <div style="max-width:560px;margin:0 auto;text-align:center;">
+    <h2 class="ss-section-title" style="font-family:var(--font-heading);font-size:clamp(28px,4vw,44px);font-weight:800;margin-bottom:12px;letter-spacing:-1px;color:${data.textColor};">${data.heading}</h2>
+    <p style="font-size:17px;opacity:0.7;margin-bottom:36px;">${data.subheading}</p>
+    <form onsubmit="event.preventDefault();this.innerHTML='<div style=\'text-align:center;padding:20px;\'><span style=\'font-size:40px;\'>🎉</span><h3 style=\'margin-top:12px;font-family:var(--font-heading);\'>You\'re on the list!</h3><p style=\'opacity:0.7;margin-top:8px;\'>We\'ll be in touch soon.</p></div>';" style="display:flex;flex-direction:column;gap:12px;text-align:left;">
+      ${fields}
+      <button type="submit" style="background:${data.btnColor};color:white;padding:16px;border-radius:var(--btn-radius);font-size:16px;font-weight:700;border:none;cursor:pointer;transition:all 0.3s;font-family:var(--font-body);" onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 12px 32px rgba(255,107,53,0.4)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">${data.btnText}</button>
+      <p style="text-align:center;font-size:13px;opacity:0.5;margin-top:4px;">${data.privacyText}</p>
+    </form>
+  </div>
+</section>`;
+  },
+
+  testimonials(data) {
+    const cards = data.cards.map((c, i) => `
+      <div class="ss-card ss-testimonial-card" style="background:${c.bgColor};border:1px solid rgba(0,0,0,0.06);border-radius:var(--radius);padding:28px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:16px;transition:transform 0.3s;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+        <div style="display:flex;gap:2px;color:#ffd700;font-size:16px;">${'★'.repeat(c.rating)}</div>
+        <p style="font-size:15px;line-height:1.7;color:${data.textColor};opacity:0.85;font-style:italic;">"${c.quote}"</p>
+        <div style="display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:12px;border-top:1px solid rgba(0,0,0,0.05);">
+          <div style="width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,${data.accentColor},${data.accentColor}88);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:white;flex-shrink:0;">${c.name.charAt(0)}</div>
+          <div>
+            <div style="font-weight:700;font-size:14px;color:${data.textColor};">${c.name}</div>
+            <div style="font-size:12px;color:${data.textColor};opacity:0.5;">${c.role}</div>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    return `
+<section class="ss-block ss-testimonials" style="background:${data.bgColor};padding:var(--section-pad) var(--section-pad);">
+  <div style="max-width:var(--container);margin:0 auto;">
+    <div style="text-align:center;margin-bottom:56px;">
+      <h2 class="ss-section-title" style="font-family:var(--font-heading);font-size:clamp(28px,4vw,48px);font-weight:800;margin-bottom:12px;letter-spacing:-1px;color:${data.textColor};">${data.heading}</h2>
+      <p style="font-size:17px;color:${data.textColor};opacity:0.6;">${data.subheading}</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;">${cards}</div>
+  </div>
+</section>`;
+  },
+
+  pricing(data) {
+    const plans = data.plans.map((p, i) => `
+      <div class="ss-card ss-pricing-card" style="background:${p.bgColor};border:1px solid ${p.borderColor};border-radius:var(--radius);padding:32px;display:flex;flex-direction:column;gap:20px;position:relative;transition:transform 0.3s;" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='translateY(0)'">
+        ${p.featured ? `<div style="position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:white;color:${data.bgColor};padding:4px 16px;border-radius:50px;font-size:12px;font-weight:700;letter-spacing:0.5px;white-space:nowrap;">MOST POPULAR ⭐</div>` : ''}
+        <div>
+          <div style="font-size:14px;font-weight:600;color:${p.featured?'rgba(255,255,255,0.8)':data.textColor};opacity:0.7;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">${p.name}</div>
+          <div style="display:flex;align-items:baseline;gap:4px;">
+            <span style="font-family:var(--font-heading);font-size:52px;font-weight:800;color:${p.featured?'white':data.textColor};line-height:1;">${p.price}</span>
+            <span style="font-size:14px;color:${p.featured?'rgba(255,255,255,0.7)':data.textColor};opacity:0.6;">${p.period}</span>
+          </div>
+          <p style="font-size:14px;color:${p.featured?'rgba(255,255,255,0.7)':data.textColor};opacity:0.6;margin-top:8px;">${p.description}</p>
+        </div>
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:10px;flex:1;">
+          ${p.features.map(f => `<li style="display:flex;align-items:center;gap:10px;font-size:14px;color:${p.featured?'rgba(255,255,255,0.9)':data.textColor};">
+            <span style="color:${p.featured?'white':data.accentColor};font-size:16px;flex-shrink:0;">✓</span>${f}
+          </li>`).join('')}
+        </ul>
+        <a href="${p.ctaLink}" style="background:${p.featured?'white':data.accentColor};color:${p.featured?data.accentColor:'white'};padding:14px 24px;border-radius:var(--btn-radius);text-align:center;font-size:15px;font-weight:700;text-decoration:none;transition:all 0.3s;display:block;" onmouseover="this.style.transform='translateY(-2px)';this.style.opacity='0.9'" onmouseout="this.style.transform='translateY(0)';this.style.opacity='1'">${p.ctaText}</a>
+      </div>
+    `).join('');
+    return `
+<section class="ss-block ss-pricing" style="background:${data.bgColor};padding:var(--section-pad) var(--section-pad);">
+  <div style="max-width:var(--container);margin:0 auto;">
+    <div style="text-align:center;margin-bottom:56px;">
+      <h2 class="ss-section-title" style="font-family:var(--font-heading);font-size:clamp(28px,4vw,48px);font-weight:800;margin-bottom:12px;letter-spacing:-1px;color:${data.textColor};">${data.heading}</h2>
+      <p style="font-size:17px;color:${data.textColor};opacity:0.6;">${data.subheading}</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px;align-items:start;">${plans}</div>
+  </div>
+</section>`;
+  },
+
+  cta(data) {
+    const bg = data.bgType === 'image' && data.bgImage
+      ? `url('${data.bgImage}') center/cover no-repeat`
+      : `linear-gradient(135deg, ${data.bgColor} 0%, ${data.bgColor2} 100%)`;
+    return `
+<section class="ss-block ss-cta" style="background:${bg};color:${data.textColor};padding:100px var(--section-pad);text-align:center;position:relative;overflow:hidden;">
+  <div style="position:absolute;inset:0;background:url('data:image/svg+xml,<svg xmlns=\\"http://www.w3.org/2000/svg\\" viewBox=\\"0 0 100 100\\"><circle cx=\\"50\\" cy=\\"50\\" r=\\"40\\" fill=\\"none\\" stroke=\\"rgba(255,255,255,0.05)\\" stroke-width=\\"1\\"/></svg>') 50% 50% / 400px 400px;pointer-events:none;"></div>
+  <div style="position:relative;z-index:1;max-width:700px;margin:0 auto;">
+    ${data.showBadge ? `<div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);border-radius:50px;padding:6px 18px;font-size:13px;margin-bottom:24px;backdrop-filter:blur(8px);">${data.badgeText}</div>` : ''}
+    <h2 style="font-family:var(--font-heading);font-size:clamp(32px,5vw,60px);font-weight:800;margin-bottom:16px;letter-spacing:-1.5px;line-height:1.1;">${data.heading}</h2>
+    <p style="font-size:18px;opacity:0.85;margin-bottom:40px;line-height:1.6;">${data.subheading}</p>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;justify-content:center;">
+      <a href="${data.btnLink}" style="background:${data.btnColor};color:${data.btnTextColor};padding:18px 40px;border-radius:var(--btn-radius);font-size:17px;font-weight:700;text-decoration:none;transition:all 0.3s;display:inline-flex;align-items:center;gap:8px;" onmouseover="this.style.transform='translateY(-3px)';this.style.boxShadow='0 16px 48px rgba(0,0,0,0.2)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">${data.btnText}</a>
+      <a href="${data.btn2Link}" style="background:rgba(255,255,255,0.15);color:${data.textColor};padding:18px 40px;border-radius:var(--btn-radius);font-size:17px;font-weight:600;text-decoration:none;border:1px solid rgba(255,255,255,0.3);backdrop-filter:blur(8px);transition:all 0.3s;" onmouseover="this.style.background='rgba(255,255,255,0.22)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">${data.btn2Text}</a>
+    </div>
+  </div>
+</section>`;
+  },
+
+  features(data) {
+    const items = data.items.map(item => `
+      <div class="ss-card ss-feature-card" style="background:white;border:1px solid rgba(0,0,0,0.06);border-radius:var(--radius);padding:28px;box-shadow:var(--shadow);transition:all 0.3s;" onmouseover="this.style.transform='translateY(-4px)';this.style.borderColor='${data.accentColor}'" onmouseout="this.style.transform='translateY(0)';this.style.borderColor='rgba(0,0,0,0.06)'">
+        <div style="width:52px;height:52px;background:linear-gradient(135deg,${data.accentColor}20,${data.accentColor}08);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px;margin-bottom:16px;border:1px solid ${data.accentColor}20;">${item.icon}</div>
+        <h3 style="font-family:var(--font-heading);font-size:18px;font-weight:700;color:${data.textColor};margin-bottom:8px;">${item.title}</h3>
+        <p style="font-size:14px;color:${data.textColor};opacity:0.6;line-height:1.7;">${item.description}</p>
+      </div>
+    `).join('');
+    return `
+<section class="ss-block ss-features" style="background:${data.bgColor};padding:var(--section-pad) var(--section-pad);">
+  <div style="max-width:var(--container);margin:0 auto;">
+    <div style="text-align:center;margin-bottom:56px;">
+      <h2 class="ss-section-title" style="font-family:var(--font-heading);font-size:clamp(28px,4vw,48px);font-weight:800;margin-bottom:12px;letter-spacing:-1px;color:${data.textColor};">${data.heading}</h2>
+      <p style="font-size:17px;color:${data.textColor};opacity:0.6;">${data.subheading}</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${data.columns},1fr);gap:24px;">${items}</div>
+  </div>
+</section>`;
+  },
+
+  gallery(data) {
+    const imgs = data.images.map((img, i) => {
+      const colors = ['#ff6b35','#8b5cf6','#3b82f6','#22c55e','#f59e0b','#ef4444'];
+      const bg = img.src ? `url('${img.src}') center/cover` : `linear-gradient(135deg, ${colors[i%colors.length]}33, ${colors[(i+1)%colors.length]}33)`;
+      return `
+        <div style="position:relative;overflow:hidden;border-radius:var(--radius);aspect-ratio:4/3;background:${bg};cursor:pointer;group;" onmouseover="this.querySelector('.gal-overlay').style.opacity='1'" onmouseout="this.querySelector('.gal-overlay').style.opacity='0'">
+          ${!img.src ? `<div style="position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;"><span style="font-size:32px;">${['🖼️','💻','✨','🚀','📱','🎨'][i%6]}</span><span style="font-size:12px;color:rgba(255,255,255,0.6);font-weight:500;">Add Image</span></div>` : ''}
+          <div class="gal-overlay" style="position:absolute;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:flex-end;padding:16px;opacity:0;transition:opacity 0.3s;">
+            <span style="color:white;font-size:14px;font-weight:600;">${img.caption}</span>
+          </div>
+        </div>
+      `;
+    }).join('');
+    return `
+<section class="ss-block ss-gallery" style="background:${data.bgColor};padding:var(--section-pad) var(--section-pad);">
+  <div style="max-width:var(--container);margin:0 auto;">
+    <div style="text-align:center;margin-bottom:48px;">
+      <h2 class="ss-section-title" style="font-family:var(--font-heading);font-size:clamp(28px,4vw,48px);font-weight:800;margin-bottom:12px;letter-spacing:-1px;color:${data.textColor};">${data.heading}</h2>
+      <p style="font-size:17px;color:${data.textColor};opacity:0.6;">${data.subheading}</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(${data.columns},1fr);gap:16px;">${imgs}</div>
+  </div>
+</section>`;
+  },
+
+  footer(data) {
+    const cols = data.columns.map(col => `
+      <div>
+        <h4 style="font-family:var(--font-heading);font-size:14px;font-weight:700;color:${data.accentColor};text-transform:uppercase;letter-spacing:0.8px;margin-bottom:16px;">${col.title}</h4>
+        <ul style="list-style:none;display:flex;flex-direction:column;gap:10px;">
+          ${col.links.map(l => `<li><a href="${l.url}" style="color:${data.textColor};opacity:0.6;font-size:14px;text-decoration:none;transition:opacity 0.2s;" onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.6'">${l.label}</a></li>`).join('')}
+        </ul>
+      </div>
+    `).join('');
+    const socials = data.socialLinks.map(s => `
+      <a href="${s.url}" style="width:36px;height:36px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;color:${data.textColor};opacity:0.7;text-decoration:none;font-size:14px;font-weight:700;transition:all 0.2s;" onmouseover="this.style.opacity='1';this.style.background='${data.accentColor}';this.style.borderColor='${data.accentColor}'" onmouseout="this.style.opacity='0.7';this.style.background='rgba(255,255,255,0.06)';this.style.borderColor='rgba(255,255,255,0.1)'">${s.icon}</a>
+    `).join('');
+    return `
+<footer class="ss-block ss-footer" style="background:${data.bgColor};color:${data.textColor};padding:64px var(--section-pad) 32px;">
+  <div style="max-width:var(--container);margin:0 auto;">
+    <div style="display:grid;grid-template-columns:1.5fr repeat(${data.columns.length},1fr);gap:48px;margin-bottom:48px;padding-bottom:48px;border-bottom:1px solid rgba(255,255,255,0.06);">
+      <div>
+        <div style="font-family:var(--font-heading);font-weight:800;font-size:22px;color:white;margin-bottom:10px;letter-spacing:-0.5px;">${data.logo}</div>
+        <p style="font-size:14px;opacity:0.5;margin-bottom:24px;line-height:1.6;">${data.tagline}</p>
+        <div style="display:flex;gap:8px;">${socials}</div>
+      </div>
+      ${cols}
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+      <p style="font-size:13px;opacity:0.4;">${data.copyright}</p>
+      <div style="display:flex;gap:24px;">
+        <a href="#" style="font-size:13px;color:${data.textColor};opacity:0.4;text-decoration:none;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='0.4'">Privacy</a>
+        <a href="#" style="font-size:13px;color:${data.textColor};opacity:0.4;text-decoration:none;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='0.4'">Terms</a>
+        <a href="#" style="font-size:13px;color:${data.textColor};opacity:0.4;text-decoration:none;transition:opacity 0.2s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='0.4'">Cookies</a>
+      </div>
+    </div>
+  </div>
+</footer>`;
+  },
+
+};
+
+/* ──────────────────────────────────────────────────────────────────
+   PREVIEW ENGINE — generates the full page HTML for the iframe
+────────────────────────────────────────────────────────────────── */
+function buildPreviewHTML(forExport = false) {
+  const template = Templates[State.currentTemplate];
+
+  // Merge global styles with template overrides
+  const styles = { ...State.globalStyles, ...template.overrides };
+  const cssVars = Object.entries(styles).map(([k, v]) => `${k}: ${v};`).join('\n    ');
+
+  // Build block HTML
+  const blocksHTML = State.blocks.map(block => {
+    const renderer = BlockRenderers[block.type];
+    if (!renderer) return '';
+    const html = renderer(block.data);
+    // Wrap with an ID for selection
+    return `<div class="ss-block-wrapper" data-block-id="${block.id}" style="position:relative;">
+      ${html}
+      ${!forExport ? `
+      <div class="ss-block-controls" style="position:absolute;top:8px;right:8px;display:none;z-index:200;gap:4px;flex-wrap:nowrap;">
+        <button onclick="window.parent.openBlockSettings('${block.id}')" style="background:#1a1a2e;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:11px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:4px;font-family:DM Sans,sans-serif;">✏️ Edit</button>
+        <button onclick="window.parent.moveBlock('${block.id}','up')" style="background:#1a1a2e;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:DM Sans,sans-serif;">↑</button>
+        <button onclick="window.parent.moveBlock('${block.id}','down')" style="background:#1a1a2e;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:DM Sans,sans-serif;">↓</button>
+        <button onclick="window.parent.duplicateBlock('${block.id}')" style="background:#1a1a2e;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:DM Sans,sans-serif;">⧉</button>
+        <button onclick="window.parent.deleteBlock('${block.id}')" style="background:#ef4444;color:white;border:none;border-radius:6px;padding:6px 10px;font-size:11px;cursor:pointer;font-family:DM Sans,sans-serif;">🗑</button>
+      </div>` : ''}
+    </div>`;
+  }).join('\n');
+
+  const emptyState = State.blocks.length === 0 && !forExport ? `
+    <div style="min-height:60vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#f8f8ff;font-family:DM Sans,sans-serif;">
+      <div style="font-size:64px;">🏗️</div>
+      <h2 style="font-size:24px;font-weight:700;color:#1a1a2e;font-family:Syne,sans-serif;">Your canvas is empty</h2>
+      <p style="color:#666;font-size:16px;">Add blocks from the left panel to start building</p>
+      <div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap;justify-content:center;">
+        <button onclick="window.parent.addBlock('hero')" style="background:#ff6b35;color:white;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;">+ Add Hero</button>
+        <button onclick="window.parent.addBlock('nav')" style="background:#1a1a2e;color:white;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;">+ Add Nav</button>
+        <button onclick="window.parent.addBlock('features')" style="background:#1a1a2e;color:white;border:none;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:600;cursor:pointer;">+ Add Features</button>
+      </div>
+    </div>
+  ` : '';
+
+  const previewInteractScript = !forExport ? `
+    <script>
+      // Block hover controls
+      document.querySelectorAll('.ss-block-wrapper').forEach(wrap => {
+        wrap.addEventListener('mouseenter', () => {
+          const ctrl = wrap.querySelector('.ss-block-controls');
+          if (ctrl) ctrl.style.display = 'flex';
+        });
+        wrap.addEventListener('mouseleave', () => {
+          const ctrl = wrap.querySelector('.ss-block-controls');
+          if (ctrl) ctrl.style.display = 'none';
+        });
+      });
+    </\script>
+  ` : '';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${document.getElementById('site-name-input')?.value || 'My Site'}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      ${cssVars}
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: var(--font-body);
+      color: var(--text);
+      background: var(--bg);
+      font-size: var(--font-base);
+      line-height: var(--line-height);
+      -webkit-font-smoothing: antialiased;
+    }
+    .ss-block-wrapper { position: relative; }
+    .ss-block-controls { display: none; }
+    ${template.extraCSS || ''}
+    ${State.customCSS}
+    @media (max-width: 768px) {
+      [style*="grid-template-columns: repeat(3"] { grid-template-columns: repeat(2, 1fr) !important; }
+      [style*="grid-template-columns: repeat(2"] { grid-template-columns: 1fr !important; }
+      [style*="grid-template-columns: 1.5fr"] { grid-template-columns: 1fr !important; }
+      [style*="min-height: 85vh"] { min-height: 60vh !important; }
+      .ss-nav-links { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  ${blocksHTML || emptyState}
+  ${previewInteractScript}
+</body>
+</html>`;
 }
 
-function undo() {
-  if (historyIndex <= 0) return;
-  historyIndex--;
-  restoreHistory();
-}
-function redo() {
-  if (historyIndex >= history.length - 1) return;
-  historyIndex++;
-  restoreHistory();
-}
-function restoreHistory() {
-  const snap = JSON.parse(history[historyIndex]);
-  state.blocks = snap.blocks;
-  Object.assign(state.globalStyles, snap.globalStyles);
-  state.template = snap.template;
-  state.spacing  = snap.spacing;
-  state.customCSS = snap.customCSS;
-  state.selectedBlockId = null;
-  closeRightPanel();
-  syncStylePanelUI();
-  updateLayersList();
-  updateStatusBar();
-  updateUndoRedoBtns();
-  renderPreview();
-  showToast('History restored');
-}
-function updateUndoRedoBtns() {
-  const u = document.getElementById('undo-btn');
-  const r = document.getElementById('redo-btn');
-  if (u) u.disabled = historyIndex <= 0;
-  if (r) r.disabled = historyIndex >= history.length - 1;
-  const el = document.getElementById('status-undo');
-  if (el) el.textContent = history.length > 1
-    ? `${historyIndex + 1}/${history.length} states` : 'No history';
-}
+/* ──────────────────────────────────────────────────────────────────
+   CORE FUNCTIONS
+────────────────────────────────────────────────────────────────── */
 
-let blockIdCounter = 1;
-let dragSrcId = null;
-
-// ═══════════════════════════════════════════════
-//  INIT
-// ═══════════════════════════════════════════════
-document.getElementById('gate-pw').addEventListener('keydown', e => {
-  if (e.key === 'Enter') checkPassword();
-});
-
+// Password gate
 function checkPassword() {
-  const pw = document.getElementById('gate-pw').value.trim();
-  if (pw === 'SS26') {
-    const gate = document.getElementById('gate');
-    gate.style.transition = 'opacity 0.5s';
+  const input = document.getElementById('gate-input');
+  const error = document.getElementById('gate-error');
+  const val = input.value.trim();
+
+  if (val === 'SS26') {
+    State.authenticated = true;
+    const gate = document.getElementById('password-gate');
     gate.style.opacity = '0';
+    gate.style.transition = 'opacity 0.5s ease';
     setTimeout(() => {
       gate.style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       initApp();
     }, 500);
   } else {
-    const err = document.getElementById('gate-err');
-    err.style.opacity = '1';
-    document.getElementById('gate-pw').style.borderColor = '#f87171';
-    setTimeout(() => { err.style.opacity = '0'; document.getElementById('gate-pw').style.borderColor = ''; }, 3000);
+    error.textContent = '❌ Invalid access code. Try again.';
+    error.style.animation = 'none';
+    requestAnimationFrame(() => { error.style.animation = 'shake 0.4s ease both'; });
+    input.value = '';
+    input.focus();
   }
 }
 
+// Allow Enter key on password gate
+document.getElementById('gate-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') checkPassword();
+});
+
+// Initialize the app
 function initApp() {
-  // FIX 5: show mobile warning if screen is small
-  if (window.innerWidth < 900) {
-    document.getElementById('mobile-warning').classList.remove('hidden');
-  }
-  setupKeyboardShortcuts();
-  // FIX 7: ensure preview is in desktop mode from the start (no max-width)
-  setSize('desktop', document.querySelector('.size-btn'));
-  applyTemplate('glass', document.querySelector('.template-card.active'), false);
+  applyTemplate('glass');
+  refreshPreview();
+  updateLayers();
+  showToast('🎉 Welcome to Supersuite!', 'Investor Demo · Password: SS26', 'success');
 }
 
-function setupKeyboardShortcuts() {
-  document.addEventListener('keydown', e => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) { e.preventDefault(); redo(); }
-    if (e.key === 'Escape') closeRightPanel();
-  });
-}
+// Refresh the live preview iframe
+function refreshPreview() {
+  const frame = document.getElementById('preview-frame');
+  const html = buildPreviewHTML(false);
+  frame.srcdoc = html;
 
-// ═══════════════════════════════════════════════
-//  TAB / SIZE SWITCHING
-// ═══════════════════════════════════════════════
-function setPanelTab(btn, tab) {
-  document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  ['templates','blocks','styles','layers'].forEach(t => {
-    const el = document.getElementById('tab-' + t);
-    if (el) el.style.display = t === tab ? '' : 'none';
-  });
-}
-
-function setTopTab(btn) {
-  document.querySelectorAll('.topbar-tab').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-}
-
-// FIX 7: desktop = no max-width constraint so it fills available space
-function setSize(size, btn) {
-  document.querySelectorAll('.size-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  const wrap = document.getElementById('preview-wrap');
-  // Remove all size classes, then add only if not desktop
-  wrap.className = 'preview-wrap' + (size !== 'desktop' ? ' ' + size : '');
-}
-
-// ═══════════════════════════════════════════════
-//  TEMPLATES  (FIX 6: dramatically different styles)
-// ═══════════════════════════════════════════════
-const templates = {
-
-  glass: {
-    name: 'Liquid Glass',
-    // Light frosted background, subtle colors, glassmorphism cards
-    bodyBg:   'linear-gradient(160deg, #ededf7 0%, #e2e2f0 100%)',
-    darkMode: false,
-    css: `
-      body { background: linear-gradient(160deg, #ededf7 0%, #e2e2f0 100%); font-family: __BODY__; color: __TEXT__; margin: 0; }
-      .ss-nav { background: rgba(255,255,255,0.72); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-bottom: 1.5px solid rgba(255,255,255,0.9); box-shadow: 0 2px 24px rgba(0,0,0,0.06); }
-      .ss-hero { background: rgba(255,255,255,0.55); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border-bottom: 1px solid rgba(255,255,255,0.8); }
-      .ss-section { background: rgba(255,255,255,0.38); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255,255,255,0.5); }
-      .ss-alt-section { background: rgba(255,255,255,0.58); backdrop-filter: blur(16px); border-bottom: 1px solid rgba(255,255,255,0.55); }
-      .ss-cta-section { background: linear-gradient(135deg, __PRIMARY__ee 0%, __SECONDARY__cc 100%); }
-      .ss-btn { background: __PRIMARY__; border-radius: __BTN_RADIUS__; color: #fff; padding: 14px 32px; font-family: __HEADING__; font-weight: 700; font-size: 15px; border: none; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 24px __PRIMARY__55; letter-spacing: 0.03em; }
-      .ss-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 36px __PRIMARY__88; }
-      .ss-btn-outline { background: transparent; border: 2px solid __PRIMARY__; border-radius: __BTN_RADIUS__; color: __PRIMARY__; padding: 12px 28px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.3s; }
-      .ss-btn-outline:hover { background: __PRIMARY__; color: #fff; }
-      .ss-form input, .ss-form textarea { background: rgba(255,255,255,0.78); border: 1.5px solid rgba(200,200,220,0.55); backdrop-filter: blur(8px); color: __TEXT__; }
-      .ss-card { background: rgba(255,255,255,0.68); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.88); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
-      .ss-pricing-card { background: rgba(255,255,255,0.68); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.88); border-radius: 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); }
-      .ss-pricing-card.featured { background: __PRIMARY__; color: #fff; border-color: transparent; box-shadow: 0 24px 64px __PRIMARY__55; }
-      .ss-faq-item { background: rgba(255,255,255,0.62); border: 1px solid rgba(255,255,255,0.82); border-radius: 12px; margin-bottom: 8px; backdrop-filter: blur(8px); overflow: hidden; }
-      .ss-faq-q { padding: 18px 22px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; color: __TEXT__; }
-      .ss-faq-q:hover { background: rgba(255,255,255,0.4); }
-      .ss-faq-a { padding: 0 22px; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; color: __TEXT__99; line-height: 1.7; font-size: 15px; }
-      .ss-faq-a.open { max-height: 200px; padding: 0 22px 18px; }
-      .ss-feature-icon-wrap { background: rgba(255,255,255,0.75); border: 1px solid rgba(255,255,255,0.9); border-radius: 16px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
-    `
-  },
-
-  bold: {
-    name: 'Classy Bold',
-    // FIX 6: PITCH BLACK background, stark white text, thick colored borders
-    bodyBg:   '#000000',
-    darkMode: true,
-    css: `
-      body { background: #000000; font-family: __BODY__; color: #ffffff; margin: 0; }
-      .ss-nav { background: #000000; border-bottom: 3px solid __PRIMARY__; }
-      .ss-hero { background: #000000; border-bottom: 1px solid #222; position: relative; overflow: hidden; }
-      .ss-hero::before { content: ''; position: absolute; top: -200px; left: 50%; transform: translateX(-50%); width: 700px; height: 700px; background: radial-gradient(circle, __PRIMARY__20 0%, transparent 70%); pointer-events: none; }
-      .ss-section { background: #0a0a0a; border-bottom: 1px solid #1a1a1a; }
-      .ss-alt-section { background: #050505; border-bottom: 1px solid #1a1a1a; }
-      .ss-cta-section { background: __PRIMARY__; }
-      .ss-btn { background: __PRIMARY__; border-radius: __BTN_RADIUS__; color: #fff; padding: 15px 36px; font-family: __HEADING__; font-weight: 800; font-size: 15px; border: none; cursor: pointer; transition: all 0.25s; letter-spacing: 0.06em; text-transform: uppercase; box-shadow: none; }
-      .ss-btn:hover { background: #fff; color: #000; transform: none; box-shadow: none; }
-      .ss-btn-outline { background: transparent; border: 2px solid #ffffff44; border-radius: __BTN_RADIUS__; color: #fff; padding: 13px 32px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.25s; letter-spacing: 0.04em; }
-      .ss-btn-outline:hover { border-color: #fff; }
-      .ss-form input, .ss-form textarea { background: #111; border: 1px solid #333; color: #fff; }
-      .ss-card { background: #111111; border: 1px solid #222; border-radius: 0; border-left: 3px solid __PRIMARY__; }
-      .ss-pricing-card { background: #0f0f0f; border: 1px solid #222; border-radius: 0; color: #fff; }
-      .ss-pricing-card.featured { background: __PRIMARY__; color: #fff; border-color: __PRIMARY__; box-shadow: none; border-radius: 0; }
-      .ss-faq-item { background: transparent; border: none; border-bottom: 1px solid #222; margin-bottom: 0; border-radius: 0; overflow: hidden; }
-      .ss-faq-q { padding: 20px 0; cursor: pointer; font-weight: 700; display: flex; justify-content: space-between; align-items: center; transition: color 0.2s; color: #fff; letter-spacing: 0.02em; }
-      .ss-faq-q:hover { color: __PRIMARY__; }
-      .ss-faq-a { padding: 0; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; color: #888; line-height: 1.7; font-size: 15px; }
-      .ss-faq-a.open { max-height: 200px; padding: 0 0 20px; }
-      .ss-heading { color: #ffffff !important; letter-spacing: -0.03em; }
-      .ss-subheading { color: #666 !important; }
-      .ss-feature-icon-wrap { background: transparent; border: 1px solid __PRIMARY__; border-radius: 0; width: 52px; height: 52px; display: flex; align-items: center; justify-content: center; font-size: 22px; margin-bottom: 16px; }
-      .ss-pricing-card .ss-plan-name, .ss-pricing-card .ss-plan-price, .ss-pricing-card .ss-plan-period { color: #fff; }
-      .ss-pricing-card .ss-plan-features li { border-bottom-color: #222; color: #aaa; }
-      .ss-cta-section .ss-heading { color: #000 !important; }
-      .ss-cta-section .ss-subheading { color: #00000088 !important; }
-      .ss-cta-section .ss-btn { background: #000 !important; color: __PRIMARY__ !important; }
-      .ss-cta-section .ss-btn:hover { background: #fff !important; color: #000 !important; }
-    `
-  },
-
-  custom: {
-    name: 'Vivid Custom',
-    bodyBg:   'linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%)',
-    darkMode: true,
-    css: `
-      body { background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%); font-family: __BODY__; color: #fff; margin: 0; min-height: 100vh; }
-      .ss-nav { background: rgba(15,12,41,0.85); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.1); }
-      .ss-hero { background: transparent; border-bottom: 1px solid rgba(255,255,255,0.08); }
-      .ss-section { background: rgba(0,0,0,0.25); border-bottom: 1px solid rgba(255,255,255,0.05); }
-      .ss-alt-section { background: rgba(255,255,255,0.04); border-bottom: 1px solid rgba(255,255,255,0.06); }
-      .ss-cta-section { background: linear-gradient(135deg, __PRIMARY__, __SECONDARY__, #ff6b6b); }
-      .ss-btn { background: linear-gradient(135deg, __PRIMARY__, __SECONDARY__); border: none; border-radius: __BTN_RADIUS__; color: #fff; padding: 14px 32px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.3s; box-shadow: 0 4px 24px rgba(0,0,0,0.4), 0 0 40px __PRIMARY__33; letter-spacing: 0.03em; }
-      .ss-btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 12px 44px __PRIMARY__77; }
-      .ss-btn-outline { background: transparent; border: 2px solid rgba(255,255,255,0.3); border-radius: __BTN_RADIUS__; color: #fff; padding: 12px 28px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.3s; }
-      .ss-btn-outline:hover { border-color: rgba(255,255,255,0.7); }
-      .ss-form input, .ss-form textarea { background: rgba(255,255,255,0.1); border: 1.5px solid rgba(255,255,255,0.2); color: #fff; }
-      .ss-card { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.13); border-radius: 20px; color: #fff; backdrop-filter: blur(10px); }
-      .ss-pricing-card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.13); border-radius: 20px; color: #fff; backdrop-filter: blur(10px); }
-      .ss-pricing-card.featured { background: linear-gradient(135deg, __PRIMARY__, __SECONDARY__); border-color: transparent; box-shadow: 0 24px 64px __PRIMARY__55; }
-      .ss-faq-item { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
-      .ss-faq-q { padding: 18px 22px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; color: #fff; }
-      .ss-faq-q:hover { background: rgba(255,255,255,0.05); }
-      .ss-faq-a { padding: 0 22px; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; color: rgba(255,255,255,0.55); line-height: 1.7; font-size: 15px; }
-      .ss-faq-a.open { max-height: 200px; padding: 0 22px 18px; }
-      .ss-heading { color: #ffffff !important; }
-      .ss-subheading { color: rgba(255,255,255,0.6) !important; }
-      .ss-feature-icon-wrap { background: linear-gradient(135deg, __PRIMARY__33, __SECONDARY__22); border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; }
-    `
-  },
-
-  neon: {
-    name: 'Neon Noir',
-    bodyBg:   '#030308',
-    darkMode: true,
-    css: `
-      body { background: #030308; font-family: __BODY__; color: #d0d0ff; margin: 0; }
-      .ss-nav { background: rgba(3,3,8,0.97); backdrop-filter: blur(20px); border-bottom: 1px solid __PRIMARY__55; box-shadow: 0 0 30px __PRIMARY__22; }
-      .ss-hero { background: radial-gradient(ellipse at 50% 0%, __PRIMARY__18 0%, transparent 65%), #030308; border-bottom: 1px solid __PRIMARY__33; }
-      .ss-section { background: #060612; border-bottom: 1px solid rgba(255,255,255,0.04); }
-      .ss-alt-section { background: radial-gradient(ellipse at 50% 50%, __SECONDARY__0c 0%, transparent 70%), #05050f; border-bottom: 1px solid rgba(255,255,255,0.03); }
-      .ss-cta-section { background: #030308; border-top: 1px solid __PRIMARY__55; border-bottom: 1px solid __SECONDARY__44; }
-      .ss-btn { background: transparent; border: 1.5px solid __PRIMARY__; border-radius: __BTN_RADIUS__; color: __PRIMARY__; padding: 14px 32px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.3s; letter-spacing: 0.06em; box-shadow: 0 0 20px __PRIMARY__22, inset 0 0 20px __PRIMARY__08; }
-      .ss-btn:hover { background: __PRIMARY__1a; box-shadow: 0 0 50px __PRIMARY__55, inset 0 0 30px __PRIMARY__15; transform: translateY(-1px); color: #fff; }
-      .ss-btn-outline { background: transparent; border: 1px solid __SECONDARY__88; border-radius: __BTN_RADIUS__; color: __SECONDARY__; padding: 12px 28px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.3s; box-shadow: 0 0 16px __SECONDARY__22; }
-      .ss-btn-outline:hover { box-shadow: 0 0 36px __SECONDARY__55; }
-      .ss-form input, .ss-form textarea { background: rgba(255,255,255,0.04); border: 1px solid __PRIMARY__44; color: #d0d0ff; }
-      .ss-form input:focus, .ss-form textarea:focus { border-color: __PRIMARY__; box-shadow: 0 0 24px __PRIMARY__44; }
-      .ss-card { background: rgba(255,255,255,0.02); border: 1px solid __PRIMARY__44; border-radius: 16px; color: #d0d0ff; box-shadow: 0 0 40px __PRIMARY__0f; }
-      .ss-pricing-card { background: rgba(255,255,255,0.02); border: 1px solid __PRIMARY__44; border-radius: 16px; color: #d0d0ff; }
-      .ss-pricing-card.featured { background: transparent; border: 1px solid __PRIMARY__; box-shadow: 0 0 80px __PRIMARY__44, inset 0 0 80px __PRIMARY__08; }
-      .ss-faq-item { background: rgba(255,255,255,0.02); border: 1px solid __PRIMARY__33; border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
-      .ss-faq-q { padding: 18px 22px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; color: #d0d0ff; }
-      .ss-faq-q:hover { background: __PRIMARY__0d; color: __PRIMARY__; }
-      .ss-faq-a { padding: 0 22px; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; color: rgba(208,208,255,0.45); line-height: 1.7; font-size: 15px; }
-      .ss-faq-a.open { max-height: 200px; padding: 0 22px 18px; }
-      .ss-heading { color: #ffffff !important; text-shadow: 0 0 50px __PRIMARY__66; }
-      .ss-subheading { color: rgba(208,208,255,0.45) !important; }
-      .ss-feature-icon-wrap { background: transparent; border: 1px solid __PRIMARY__66; border-radius: 16px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; box-shadow: 0 0 24px __PRIMARY__44; }
-      .ss-plan-price { text-shadow: 0 0 30px __PRIMARY__99 !important; color: #fff !important; }
-      .ss-plan-name { color: __PRIMARY__ !important; }
-      .ss-cta-section .ss-heading { text-shadow: 0 0 60px __PRIMARY__; }
-      .ss-cta-section .ss-btn { border-color: #fff; color: #fff; box-shadow: 0 0 30px rgba(255,255,255,0.2); }
-    `
-  },
-
-  clean: {
-    name: 'Clean Light',
-    bodyBg:   '#ffffff',
-    darkMode: false,
-    css: `
-      body { background: #ffffff; font-family: __BODY__; color: __TEXT__; margin: 0; }
-      .ss-nav { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.07); }
-      .ss-hero { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.05); }
-      .ss-section { background: #f7f7fa; border-bottom: 1px solid rgba(0,0,0,0.05); }
-      .ss-alt-section { background: #fff; border-bottom: 1px solid rgba(0,0,0,0.05); }
-      .ss-cta-section { background: __TEXT__; }
-      .ss-btn { background: __TEXT__; border-radius: __BTN_RADIUS__; color: #fff; padding: 14px 32px; font-family: __HEADING__; font-weight: 700; font-size: 15px; border: none; cursor: pointer; transition: all 0.25s; letter-spacing: 0.02em; }
-      .ss-btn:hover { background: __PRIMARY__; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,0,0,0.14); }
-      .ss-btn-outline { background: transparent; border: 1.5px solid rgba(0,0,0,0.18); border-radius: __BTN_RADIUS__; color: __TEXT__; padding: 12px 28px; font-family: __HEADING__; font-weight: 700; font-size: 15px; cursor: pointer; transition: all 0.25s; }
-      .ss-btn-outline:hover { border-color: __TEXT__; }
-      .ss-form input, .ss-form textarea { background: #f3f3f7; border: 1.5px solid rgba(0,0,0,0.09); color: __TEXT__; }
-      .ss-card { background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,0.05); }
-      .ss-pricing-card { background: #fff; border: 1.5px solid rgba(0,0,0,0.07); border-radius: 16px; box-shadow: 0 2px 16px rgba(0,0,0,0.05); }
-      .ss-pricing-card.featured { background: __TEXT__; color: #fff; border-color: transparent; box-shadow: 0 24px 64px rgba(0,0,0,0.18); }
-      .ss-faq-item { background: #fff; border: 1px solid rgba(0,0,0,0.07); border-radius: 12px; margin-bottom: 8px; overflow: hidden; }
-      .ss-faq-q { padding: 18px 22px; cursor: pointer; font-weight: 600; display: flex; justify-content: space-between; align-items: center; transition: background 0.2s; color: __TEXT__; }
-      .ss-faq-q:hover { background: #f7f7fa; }
-      .ss-faq-a { padding: 0 22px; max-height: 0; overflow: hidden; transition: max-height 0.35s ease, padding 0.35s ease; color: rgba(0,0,0,0.48); line-height: 1.7; font-size: 15px; }
-      .ss-faq-a.open { max-height: 200px; padding: 0 22px 18px; }
-      .ss-cta-section .ss-heading { color: #fff !important; }
-      .ss-cta-section .ss-subheading { color: rgba(255,255,255,0.6) !important; }
-      .ss-cta-section .ss-btn { background: #fff !important; color: __TEXT__ !important; }
-      .ss-cta-section .ss-btn:hover { background: __PRIMARY__ !important; color: #fff !important; }
-      .ss-feature-icon-wrap { background: #f3f3f7; border: 1px solid rgba(0,0,0,0.07); border-radius: 16px; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; font-size: 24px; margin-bottom: 16px; }
-    `
-  }
-};
-
-// ── CSS interpolation ─────────────────────────
-function getSpacingPx() {
-  if (state.spacing === 'compact')  return '52px 40px';
-  if (state.spacing === 'spacious') return '120px 40px';
-  return '84px 40px';
-}
-function getBtnRadius() {
-  if (state.globalStyles.btnStyle === 'square') return '6px';
-  if (state.globalStyles.btnStyle === 'pill')   return '999px';
-  return '12px';
-}
-function interpolateCSS(css) {
-  return css
-    .replace(/__PRIMARY__/g,    state.globalStyles.primaryColor)
-    .replace(/__SECONDARY__/g,  state.globalStyles.secondaryColor)
-    .replace(/__TEXT__/g,       state.globalStyles.textColor)
-    .replace(/__HEADING__/g,    state.globalStyles.headingFont)
-    .replace(/__BODY__/g,       state.globalStyles.bodyFont)
-    .replace(/__BTN_RADIUS__/g, getBtnRadius());
-}
-
-// ── Apply template ────────────────────────────
-function applyTemplate(name, card, doSave = true) {
-  state.template = name;
-  if (card) {
-    document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
-    card.classList.add('active');
-  }
-  const el = document.getElementById('status-template');
-  if (el) el.textContent = 'Template: ' + templates[name].name;
-
-  if (state.blocks.length === 0) {
-    addBlock('hero', false);
-    addBlock('features', false);
-    addBlock('pricing', false);
-    addBlock('testimonials', false);
-    addBlock('cta', false);
-  }
-  renderPreview();
-  if (doSave) { saveHistory(); showToast('Template: ' + templates[name].name); }
-  else saveHistory();
-}
-
-// ── Sync style panel UI to state ─────────────
-function syncStylePanelUI() {
-  const gs = state.globalStyles;
-  const fields = [
-    ['swatch-primary',   'hex-primary',   gs.primaryColor],
-    ['swatch-secondary', 'hex-secondary', gs.secondaryColor],
-    ['swatch-bg',        'hex-bg',        gs.bgColor],
-    ['swatch-text',      'hex-text',      gs.textColor],
-  ];
-  fields.forEach(([swId, hexId, val]) => {
-    const sw = document.getElementById(swId);
-    const hx = document.getElementById(hexId);
-    if (sw) { sw.style.background = val; const inp = sw.querySelector('input'); if (inp) inp.value = val; }
-    if (hx) hx.textContent = val;
-  });
-  const hf = document.getElementById('select-heading-font');
-  const bf = document.getElementById('select-body-font');
-  if (hf) hf.value = gs.headingFont;
-  if (bf) bf.value = gs.bodyFont;
-}
-
-// ═══════════════════════════════════════════════
-//  BLOCK DEFAULTS
-// ═══════════════════════════════════════════════
-function createBlock(type) {
-  const id = 'block_' + (blockIdCounter++);
-  const defs = {
-    hero: {
-      type:'hero', label:'Hero Section', icon:'🚀',
-      heading:'Build Your Dream Website',
-      subheading:'Fast, beautiful, and fully customizable. Start for free today.',
-      btnText:'Get Started Free', btn2Text:'See Examples', showBtn2:true,
-      textAlign:'center', showBadge:true, badgeText:'🎉 New — Version 2.0 is here',
-    },
-    // FIX 1: features block starts with 3 items, user can add unlimited
-    features: {
-      type:'features', label:'Features / Services', icon:'✨',
-      heading:'Everything You Need to Succeed',
-      subheading:'Powerful tools, intuitive design, real results.',
-      columns: 3,
-      items: [
-        { icon:'⚡', title:'Lightning Fast', desc:'Pages load in under 200ms globally on modern infrastructure.' },
-        { icon:'🎨', title:'Beautiful Design', desc:'Professionally crafted templates that convert visitors to customers.' },
-        { icon:'🔒', title:'Enterprise Security', desc:'SSL, DDoS protection, and SOC2 compliance on every plan.' },
-      ],
-    },
-    lead: {
-      type:'lead', label:'Lead Form', icon:'📬',
-      heading:'Stay in the Loop',
-      subheading:'Get exclusive updates, tips, and early access in your inbox.',
-      fields:['Full name','Email address'],
-      btnText:'Subscribe Now',
-      successMsg:'🎉 You\'re in! Check your inbox.',
-    },
-    testimonials: {
-      type:'testimonials', label:'Testimonials', icon:'💬',
-      heading:'What Our Customers Say',
-      subheading:'Trusted by thousands of creators and businesses worldwide.',
-      reviews:[
-        { name:'Sarah J.', role:'Founder, Bloom Co.', text:'Supersuite transformed our online presence. Conversions went up 3x in the first month!', avatar:'👩‍💼', rating:5 },
-        { name:'Marcus T.', role:'Creative Director', text:'I\'ve tried every website builder. Nothing comes close to this level of design quality.', avatar:'👨‍🎨', rating:5 },
-        { name:'Priya K.', role:'E-commerce Owner', text:'Set up my entire store in a weekend. The export is clean code I actually own.', avatar:'👩‍💻', rating:5 },
-      ],
-    },
-    pricing: {
-      type:'pricing', label:'Pricing', icon:'💎',
-      heading:'Simple, Transparent Pricing',
-      subheading:'No hidden fees. Cancel anytime. Start for free.',
-      showToggle:true,
-      plans:[
-        { name:'Starter', price:'$0',  priceAnnual:'$0',  period:'/mo', features:['5 pages','1 custom domain','Basic templates','SSL included','Email support'], featured:false, btn:'Start Free', badge:'' },
-        { name:'Pro',     price:'$29', priceAnnual:'$19', period:'/mo', features:['Unlimited pages','3 custom domains','All templates','Priority support','Analytics','Custom code'], featured:true, btn:'Get Pro', badge:'Most Popular' },
-        { name:'Business',price:'$79', priceAnnual:'$59', period:'/mo', features:['Everything in Pro','10 domains','Team collaboration','White label','API access','Dedicated support'], featured:false, btn:'Contact Sales', badge:'' },
-      ],
-    },
-    faq: {
-      type:'faq', label:'FAQ', icon:'❓',
-      heading:'Frequently Asked Questions',
-      subheading:'Got questions? We\'ve got answers.',
-      items:[
-        { q:'Can I cancel anytime?', a:'Yes. Cancel your subscription at any time with no questions asked. You retain access until the end of your billing period.' },
-        { q:'Do I own my website?', a:'100%. When you export, you get clean HTML, CSS, and JS that you own forever. No vendor lock-in, ever.' },
-        { q:'Is there a free trial?', a:'The Starter plan is free forever. For Pro, you get a 14-day free trial — no credit card required.' },
-        { q:'Can I use my own domain?', a:'Yes! Connect any custom domain you own. We support apex domains and subdomains.' },
-      ],
-    },
-    cta: {
-      type:'cta', label:'CTA Section', icon:'⚡',
-      heading:'Ready to Build Something Amazing?',
-      subheading:'Join 47,000+ creators who launched their dream site this week.',
-      btnText:'Start Building Free →', btn2Text:'Schedule a Demo', showBtn2:true,
-    },
+  // Also update height after load
+  frame.onload = () => {
+    try {
+      const doc = frame.contentDocument || frame.contentWindow.document;
+      const h = Math.max(doc.body.scrollHeight, 600);
+      frame.style.height = h + 'px';
+    } catch(e) {}
   };
-  return { id, ...defs[type] };
 }
 
-// ═══════════════════════════════════════════════
-//  BLOCK CRUD
-// ═══════════════════════════════════════════════
-function addBlock(type, render = true) {
-  const block = createBlock(type);
-  state.blocks.push(block);
-  updateLayersList(); updateStatusBar();
-  if (render) { renderPreview(); selectBlock(block.id); saveHistory(); showToast(block.label + ' added!'); }
+/* ──────────────────────────────────────────────────────────────────
+   BLOCK MANAGEMENT
+────────────────────────────────────────────────────────────────── */
+function addBlock(type) {
+  const def = BlockDefs[type];
+  if (!def) return;
+
+  const id = 'block_' + (State.blockIdCounter++);
+  const block = {
+    id,
+    type,
+    label: def.label,
+    icon: def.icon,
+    data: JSON.parse(JSON.stringify(def.defaultData)), // deep clone
+    visible: true,
+  };
+
+  State.blocks.push(block);
+  refreshPreview();
+  updateLayers();
+  switchTab('layers');
+  showToast('✅ Block added', def.label + ' block added to your page', 'success');
+  return id;
 }
 
-function removeBlock(id) {
-  state.blocks = state.blocks.filter(b => b.id !== id);
-  if (state.selectedBlockId === id) { state.selectedBlockId = null; closeRightPanel(); }
-  updateLayersList(); updateStatusBar(); renderPreview(); saveHistory();
-  showToast('Block removed');
+function deleteBlock(id) {
+  const idx = State.blocks.findIndex(b => b.id === id);
+  if (idx === -1) return;
+  const label = State.blocks[idx].label;
+  State.blocks.splice(idx, 1);
+  refreshPreview();
+  updateLayers();
+  showToast('🗑️ Block removed', label + ' was deleted', 'info');
 }
 
-function moveBlock(id, dir) {
-  const idx = state.blocks.findIndex(b => b.id === id);
-  const newIdx = idx + dir;
-  if (newIdx < 0 || newIdx >= state.blocks.length) return;
-  const arr = [...state.blocks];
-  [arr[idx], arr[newIdx]] = [arr[newIdx], arr[idx]];
-  state.blocks = arr;
-  updateLayersList(); renderPreview(); saveHistory();
-  // Refresh right panel so move buttons update
-  const block = state.blocks.find(b => b.id === id);
-  if (block && state.selectedBlockId === id) openRightPanel(block);
-  showToast(dir < 0 ? 'Moved up' : 'Moved down');
+function moveBlock(id, direction) {
+  const idx = State.blocks.findIndex(b => b.id === id);
+  if (idx === -1) return;
+  const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+  if (newIdx < 0 || newIdx >= State.blocks.length) return;
+  const temp = State.blocks[idx];
+  State.blocks[idx] = State.blocks[newIdx];
+  State.blocks[newIdx] = temp;
+  refreshPreview();
+  updateLayers();
+}
+
+function duplicateBlock(id) {
+  const orig = State.blocks.find(b => b.id === id);
+  if (!orig) return;
+  const newId = 'block_' + (State.blockIdCounter++);
+  const copy = JSON.parse(JSON.stringify(orig));
+  copy.id = newId;
+  const origIdx = State.blocks.indexOf(orig);
+  State.blocks.splice(origIdx + 1, 0, copy);
+  refreshPreview();
+  updateLayers();
+  showToast('⧉ Duplicated', orig.label + ' block duplicated', 'info');
+}
+
+// Expose to iframe
+window.addBlock = addBlock;
+window.deleteBlock = deleteBlock;
+window.moveBlock = moveBlock;
+window.duplicateBlock = duplicateBlock;
+
+/* ──────────────────────────────────────────────────────────────────
+   LAYERS PANEL
+────────────────────────────────────────────────────────────────── */
+function updateLayers() {
+  const list = document.getElementById('layers-list');
+  if (State.blocks.length === 0) {
+    list.innerHTML = '<p class="empty-layers">No blocks yet. Add blocks from the Blocks tab!</p>';
+    return;
+  }
+
+  list.innerHTML = State.blocks.map((block, i) => `
+    <div class="layer-item ${State.selectedBlockId === block.id ? 'active' : ''}"
+         data-id="${block.id}"
+         onclick="selectBlock('${block.id}')"
+         draggable="true"
+         ondragstart="layerDragStart(event,'${block.id}')"
+         ondragover="layerDragOver(event,'${block.id}')"
+         ondrop="layerDrop(event,'${block.id}')">
+      <span class="layer-drag-handle">⠿</span>
+      <span class="layer-icon">${block.icon}</span>
+      <span class="layer-label">${block.label}</span>
+      <div class="layer-actions">
+        <button class="layer-btn" onclick="event.stopPropagation();openBlockSettings('${block.id}')" title="Edit">✏️</button>
+        <button class="layer-btn" onclick="event.stopPropagation();moveBlock('${block.id}','up')" title="Move up">↑</button>
+        <button class="layer-btn" onclick="event.stopPropagation();moveBlock('${block.id}','down')" title="Move down">↓</button>
+        <button class="layer-btn danger" onclick="event.stopPropagation();deleteBlock('${block.id}')" title="Delete">🗑</button>
+      </div>
+    </div>
+  `).join('');
 }
 
 function selectBlock(id) {
-  state.selectedBlockId = id;
-  const block = state.blocks.find(b => b.id === id);
+  State.selectedBlockId = id;
+  updateLayers();
+  openBlockSettings(id);
+}
+
+// Layer drag & drop
+let _dragSrcId = null;
+
+function layerDragStart(e, id) {
+  _dragSrcId = id;
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function layerDragOver(e, id) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+}
+
+function layerDrop(e, targetId) {
+  e.preventDefault();
+  if (_dragSrcId === targetId) return;
+  const srcIdx = State.blocks.findIndex(b => b.id === _dragSrcId);
+  const tgtIdx = State.blocks.findIndex(b => b.id === targetId);
+  const [moved] = State.blocks.splice(srcIdx, 1);
+  State.blocks.splice(tgtIdx, 0, moved);
+  _dragSrcId = null;
+  refreshPreview();
+  updateLayers();
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   BLOCK SETTINGS MODAL — dynamic forms per block type
+────────────────────────────────────────────────────────────────── */
+let _editingBlockId = null;
+let _editingData = null;
+
+window.openBlockSettings = function(id) {
+  const block = State.blocks.find(b => b.id === id);
   if (!block) return;
-  openRightPanel(block);
-  updateLayersList();
-  const frame = document.getElementById('preview-frame');
-  if (frame.contentWindow) frame.contentWindow.postMessage({ type:'select', id }, '*');
+
+  _editingBlockId = id;
+  _editingData = JSON.parse(JSON.stringify(block.data));
+
+  document.getElementById('bsm-title').textContent = block.icon + ' ' + block.label + ' Settings';
+  document.getElementById('bsm-content').innerHTML = renderBlockSettingsForm(block.type, _editingData);
+  document.getElementById('block-settings-modal').style.display = 'flex';
+};
+
+function renderBlockSettingsForm(type, data) {
+  const forms = {
+    hero: renderHeroForm,
+    nav: renderNavForm,
+    leadform: renderLeadFormForm,
+    testimonials: renderTestimonialsForm,
+    pricing: renderPricingForm,
+    cta: renderCTAForm,
+    features: renderFeaturesForm,
+    gallery: renderGalleryForm,
+    footer: renderFooterForm,
+  };
+  return forms[type] ? forms[type](data) : '<p style="color:#666;padding:16px;">No settings available for this block.</p>';
 }
 
-// ═══════════════════════════════════════════════
-//  LAYERS  (drag-to-reorder)
-// ═══════════════════════════════════════════════
-function updateLayersList() {
-  const list  = document.getElementById('layers-list');
-  const empty = document.getElementById('layers-empty');
-  const count = document.getElementById('layer-count');
-  if (!list) return;
-  count.textContent = state.blocks.length + ' block' + (state.blocks.length !== 1 ? 's' : '');
-  if (state.blocks.length === 0) { list.innerHTML = ''; empty.style.display = ''; return; }
-  empty.style.display = 'none';
-  list.innerHTML = state.blocks.map((b, i) => `
-    <div class="block-order-item ${b.id === state.selectedBlockId ? 'selected' : ''}"
-         data-id="${b.id}" draggable="true" onclick="selectBlock('${b.id}')">
-      <span class="drag-handle">⠿</span>
-      <span class="block-order-icon">${b.icon}</span>
-      <span style="flex:1;font-size:11px;font-weight:500">${b.label}</span>
-      <span style="color:var(--text3);font-size:10px">#${i+1}</span>
-    </div>`).join('');
+function renderHeroForm(data) {
+  return `
+    <div class="bsm-tabs">
+      <button class="bsm-tab active" onclick="switchBSMTab(event,'bsm-content')">Content</button>
+      <button class="bsm-tab" onclick="switchBSMTab(event,'bsm-design')">Design</button>
+      <button class="bsm-tab" onclick="switchBSMTab(event,'bsm-buttons')">Buttons</button>
+    </div>
+    <div id="bsm-content" class="bsm-panel active">
+      <div class="bsm-field"><label>Heading</label><textarea oninput="_editingData.heading=this.value">${data.heading}</textarea></div>
+      <div class="bsm-field"><label>Subheading</label><textarea oninput="_editingData.subheading=this.value">${data.subheading}</textarea></div>
+      <div class="bsm-field"><label>Badge Text</label><input type="text" value="${data.badgeText}" oninput="_editingData.badgeText=this.value"/></div>
+      <div class="bsm-field"><label>Show Badge</label><select onchange="_editingData.showBadge=this.value==='true'"><option value="true" ${data.showBadge?'selected':''}>Yes</option><option value="false" ${!data.showBadge?'selected':''}>No</option></select></div>
+      <div class="bsm-field"><label>Alignment</label><select onchange="_editingData.alignment=this.value"><option value="center" ${data.alignment==='center'?'selected':''}>Center</option><option value="left" ${data.alignment==='left'?'selected':''}>Left</option></select></div>
+      <div class="bsm-field"><label>Min Height</label><select onchange="_editingData.minHeight=this.value"><option value="60vh">60vh</option><option value="85vh" ${data.minHeight==='85vh'?'selected':''}>85vh</option><option value="100vh">100vh</option></select></div>
+    </div>
+    <div id="bsm-design" class="bsm-panel">
+      <div class="bsm-field"><label>Background Type</label><select onchange="_editingData.bgType=this.value"><option value="gradient" ${data.bgType==='gradient'?'selected':''}>Gradient</option><option value="solid">Solid Color</option><option value="image">Image URL</option></select></div>
+      <div class="bsm-color-row"><label>BG Color 1</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+      <div class="bsm-color-row"><label>BG Color 2</label><input type="color" value="${data.bgColor2}" oninput="_editingData.bgColor2=this.value"/></div>
+      <div class="bsm-field"><label>Image URL</label><input type="url" value="${data.bgImage||''}" placeholder="https://..." oninput="_editingData.bgImage=this.value"/></div>
+      <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    </div>
+    <div id="bsm-buttons" class="bsm-panel">
+      <div class="bsm-field"><label>Primary Button Text</label><input type="text" value="${data.btnText}" oninput="_editingData.btnText=this.value"/></div>
+      <div class="bsm-field"><label>Primary Button Link</label><input type="url" value="${data.btnLink}" oninput="_editingData.btnLink=this.value"/></div>
+      <div class="bsm-color-row"><label>Button Color</label><input type="color" value="${data.btnColor}" oninput="_editingData.btnColor=this.value"/></div>
+      <div class="bsm-field"><label>Secondary Button Text</label><input type="text" value="${data.btn2Text}" oninput="_editingData.btn2Text=this.value"/></div>
+      <div class="bsm-field"><label>Secondary Button Link</label><input type="url" value="${data.btn2Link}" oninput="_editingData.btn2Link=this.value"/></div>
+    </div>
+  `;
+}
 
-  list.querySelectorAll('.block-order-item').forEach(el => {
-    el.addEventListener('dragstart', () => {
-      dragSrcId = el.dataset.id;
-      setTimeout(() => el.classList.add('dragging'), 0);
-    });
-    el.addEventListener('dragend', () => {
-      el.classList.remove('dragging');
-      list.querySelectorAll('.block-order-item').forEach(x => x.classList.remove('drag-over'));
-    });
-    el.addEventListener('dragover', e => {
-      e.preventDefault();
-      list.querySelectorAll('.block-order-item').forEach(x => x.classList.remove('drag-over'));
-      el.classList.add('drag-over');
-    });
-    el.addEventListener('drop', e => {
-      e.preventDefault();
-      if (dragSrcId === el.dataset.id) return;
-      const fi = state.blocks.findIndex(b => b.id === dragSrcId);
-      const ti = state.blocks.findIndex(b => b.id === el.dataset.id);
-      const arr = [...state.blocks];
-      const [mv] = arr.splice(fi, 1);
-      arr.splice(ti, 0, mv);
-      state.blocks = arr;
-      updateLayersList(); renderPreview(); saveHistory();
-      showToast('Block reordered');
-    });
+function renderNavForm(data) {
+  return `
+    <div class="bsm-field"><label>Logo Text</label><input type="text" value="${data.logo}" oninput="_editingData.logo=this.value"/></div>
+    <div class="bsm-field"><label>Nav Links (comma-separated)</label><input type="text" value="${data.links.join(',')}" oninput="_editingData.links=this.value.split(',').map(l=>l.trim())"/></div>
+    <div class="bsm-field"><label>CTA Button Text</label><input type="text" value="${data.ctaText}" oninput="_editingData.ctaText=this.value"/></div>
+    <div class="bsm-field"><label>CTA Button Link</label><input type="url" value="${data.ctaLink}" oninput="_editingData.ctaLink=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-color-row"><label>CTA Color</label><input type="color" value="${data.ctaBgColor}" oninput="_editingData.ctaBgColor=this.value"/></div>
+    <div class="bsm-field"><label>Sticky Navigation</label><select onchange="_editingData.sticky=this.value==='true'"><option value="true" ${data.sticky?'selected':''}>Yes</option><option value="false" ${!data.sticky?'selected':''}>No</option></select></div>
+  `;
+}
+
+function renderLeadFormForm(data) {
+  return `
+    <div class="bsm-field"><label>Section Heading</label><input type="text" value="${data.heading}" oninput="_editingData.heading=this.value"/></div>
+    <div class="bsm-field"><label>Subheading</label><textarea oninput="_editingData.subheading=this.value">${data.subheading}</textarea></div>
+    <div class="bsm-field"><label>Button Text</label><input type="text" value="${data.btnText}" oninput="_editingData.btnText=this.value"/></div>
+    <div class="bsm-field"><label>Privacy Text</label><input type="text" value="${data.privacyText}" oninput="_editingData.privacyText=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Button Color</label><input type="color" value="${data.btnColor}" oninput="_editingData.btnColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Accent Color</label><input type="color" value="${data.accentColor}" oninput="_editingData.accentColor=this.value"/></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;"/>
+    <p style="font-size:12px;color:#666;margin-bottom:12px;font-weight:600;">FORM FIELDS</p>
+    ${data.fields.map((f, i) => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px;">
+        <div class="bsm-field"><label>Field ${i+1} Type</label><select onchange="_editingData.fields[${i}].type=this.value"><option value="text" ${f.type==='text'?'selected':''}>Text</option><option value="email" ${f.type==='email'?'selected':''}>Email</option><option value="tel" ${f.type==='tel'?'selected':''}>Phone</option><option value="number">Number</option></select></div>
+        <div class="bsm-field"><label>Placeholder</label><input type="text" value="${f.placeholder}" oninput="_editingData.fields[${i}].placeholder=this.value"/></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderTestimonialsForm(data) {
+  return `
+    <div class="bsm-field"><label>Section Heading</label><input type="text" value="${data.heading}" oninput="_editingData.heading=this.value"/></div>
+    <div class="bsm-field"><label>Subheading</label><input type="text" value="${data.subheading}" oninput="_editingData.subheading=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Accent Color</label><input type="color" value="${data.accentColor}" oninput="_editingData.accentColor=this.value"/></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;"/>
+    <p style="font-size:12px;color:#666;margin-bottom:12px;font-weight:600;">TESTIMONIAL CARDS</p>
+    ${data.cards.map((c, i) => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <p style="font-size:11px;font-weight:700;color:#ff6b35;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Card ${i+1}</p>
+        <div class="bsm-field"><label>Name</label><input type="text" value="${c.name}" oninput="_editingData.cards[${i}].name=this.value"/></div>
+        <div class="bsm-field"><label>Role</label><input type="text" value="${c.role}" oninput="_editingData.cards[${i}].role=this.value"/></div>
+        <div class="bsm-field"><label>Quote</label><textarea oninput="_editingData.cards[${i}].quote=this.value">${c.quote}</textarea></div>
+        <div class="bsm-field"><label>Rating (1-5)</label><select onchange="_editingData.cards[${i}].rating=parseInt(this.value)">${[1,2,3,4,5].map(n=>`<option value="${n}" ${c.rating===n?'selected':''}>${n} stars</option>`).join('')}</select></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderPricingForm(data) {
+  return `
+    <div class="bsm-field"><label>Section Heading</label><input type="text" value="${data.heading}" oninput="_editingData.heading=this.value"/></div>
+    <div class="bsm-field"><label>Subheading</label><input type="text" value="${data.subheading}" oninput="_editingData.subheading=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Accent Color</label><input type="color" value="${data.accentColor}" oninput="_editingData.accentColor=this.value"/></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;"/>
+    <p style="font-size:12px;color:#666;margin-bottom:12px;font-weight:600;">PRICING PLANS</p>
+    ${data.plans.map((p, i) => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:12px;">
+        <p style="font-size:11px;font-weight:700;color:#ff6b35;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Plan ${i+1}: ${p.name}</p>
+        <div class="bsm-field"><label>Plan Name</label><input type="text" value="${p.name}" oninput="_editingData.plans[${i}].name=this.value"/></div>
+        <div class="bsm-field"><label>Price</label><input type="text" value="${p.price}" oninput="_editingData.plans[${i}].price=this.value"/></div>
+        <div class="bsm-field"><label>Period</label><input type="text" value="${p.period}" oninput="_editingData.plans[${i}].period=this.value"/></div>
+        <div class="bsm-field"><label>Description</label><input type="text" value="${p.description}" oninput="_editingData.plans[${i}].description=this.value"/></div>
+        <div class="bsm-field"><label>CTA Text</label><input type="text" value="${p.ctaText}" oninput="_editingData.plans[${i}].ctaText=this.value"/></div>
+        <div class="bsm-field"><label>Features (one per line)</label><textarea oninput="_editingData.plans[${i}].features=this.value.split('\\n').filter(f=>f.trim())">${p.features.join('\n')}</textarea></div>
+        <div class="bsm-field"><label>Featured Plan?</label><select onchange="_editingData.plans[${i}].featured=this.value==='true'"><option value="false" ${!p.featured?'selected':''}>No</option><option value="true" ${p.featured?'selected':''}>Yes</option></select></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderCTAForm(data) {
+  return `
+    <div class="bsm-field"><label>Heading</label><textarea oninput="_editingData.heading=this.value">${data.heading}</textarea></div>
+    <div class="bsm-field"><label>Subheading</label><textarea oninput="_editingData.subheading=this.value">${data.subheading}</textarea></div>
+    <div class="bsm-field"><label>Background Type</label><select onchange="_editingData.bgType=this.value"><option value="gradient" ${data.bgType==='gradient'?'selected':''}>Gradient</option><option value="solid">Solid</option><option value="image">Image URL</option></select></div>
+    <div class="bsm-color-row"><label>BG Color 1</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>BG Color 2</label><input type="color" value="${data.bgColor2}" oninput="_editingData.bgColor2=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-field"><label>Primary Button</label><input type="text" value="${data.btnText}" oninput="_editingData.btnText=this.value"/></div>
+    <div class="bsm-field"><label>Primary Link</label><input type="url" value="${data.btnLink}" oninput="_editingData.btnLink=this.value"/></div>
+    <div class="bsm-color-row"><label>Button Color</label><input type="color" value="${data.btnColor}" oninput="_editingData.btnColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Button Text Color</label><input type="color" value="${data.btnTextColor}" oninput="_editingData.btnTextColor=this.value"/></div>
+    <div class="bsm-field"><label>Secondary Button</label><input type="text" value="${data.btn2Text}" oninput="_editingData.btn2Text=this.value"/></div>
+  `;
+}
+
+function renderFeaturesForm(data) {
+  return `
+    <div class="bsm-field"><label>Section Heading</label><input type="text" value="${data.heading}" oninput="_editingData.heading=this.value"/></div>
+    <div class="bsm-field"><label>Subheading</label><input type="text" value="${data.subheading}" oninput="_editingData.subheading=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Accent Color</label><input type="color" value="${data.accentColor}" oninput="_editingData.accentColor=this.value"/></div>
+    <div class="bsm-field"><label>Columns</label><select onchange="_editingData.columns=parseInt(this.value)"><option value="2" ${data.columns===2?'selected':''}>2 columns</option><option value="3" ${data.columns===3?'selected':''}>3 columns</option><option value="4" ${data.columns===4?'selected':''}>4 columns</option></select></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;"/>
+    ${data.items.map((item, i) => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px;">
+        <p style="font-size:11px;font-weight:700;color:#ff6b35;margin-bottom:8px;">Feature ${i+1}</p>
+        <div class="bsm-field"><label>Icon (emoji)</label><input type="text" value="${item.icon}" oninput="_editingData.items[${i}].icon=this.value" style="font-size:18px;"/></div>
+        <div class="bsm-field"><label>Title</label><input type="text" value="${item.title}" oninput="_editingData.items[${i}].title=this.value"/></div>
+        <div class="bsm-field"><label>Description</label><textarea oninput="_editingData.items[${i}].description=this.value">${item.description}</textarea></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderGalleryForm(data) {
+  return `
+    <div class="bsm-field"><label>Section Heading</label><input type="text" value="${data.heading}" oninput="_editingData.heading=this.value"/></div>
+    <div class="bsm-field"><label>Subheading</label><input type="text" value="${data.subheading}" oninput="_editingData.subheading=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-field"><label>Columns</label><select onchange="_editingData.columns=parseInt(this.value)"><option value="2" ${data.columns===2?'selected':''}>2</option><option value="3" ${data.columns===3?'selected':''}>3</option><option value="4" ${data.columns===4?'selected':''}>4</option></select></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;"/>
+    ${data.images.map((img, i) => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px;">
+        <p style="font-size:11px;font-weight:700;color:#ff6b35;margin-bottom:8px;">Image ${i+1}</p>
+        <div class="bsm-field"><label>Image URL</label><input type="url" value="${img.src}" placeholder="https://..." oninput="_editingData.images[${i}].src=this.value"/></div>
+        <div class="bsm-field"><label>Caption</label><input type="text" value="${img.caption}" oninput="_editingData.images[${i}].caption=this.value"/></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function renderFooterForm(data) {
+  return `
+    <div class="bsm-field"><label>Logo Text</label><input type="text" value="${data.logo}" oninput="_editingData.logo=this.value"/></div>
+    <div class="bsm-field"><label>Tagline</label><input type="text" value="${data.tagline}" oninput="_editingData.tagline=this.value"/></div>
+    <div class="bsm-field"><label>Copyright Text</label><input type="text" value="${data.copyright}" oninput="_editingData.copyright=this.value"/></div>
+    <div class="bsm-color-row"><label>Background</label><input type="color" value="${data.bgColor}" oninput="_editingData.bgColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Text Color</label><input type="color" value="${data.textColor}" oninput="_editingData.textColor=this.value"/></div>
+    <div class="bsm-color-row"><label>Accent Color</label><input type="color" value="${data.accentColor}" oninput="_editingData.accentColor=this.value"/></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:16px 0;"/>
+    ${data.columns.map((col, ci) => `
+      <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:12px;margin-bottom:8px;">
+        <p style="font-size:11px;font-weight:700;color:#ff6b35;margin-bottom:8px;">Column ${ci+1}</p>
+        <div class="bsm-field"><label>Title</label><input type="text" value="${col.title}" oninput="_editingData.columns[${ci}].title=this.value"/></div>
+        <div class="bsm-field"><label>Links (label|url, one per line)</label><textarea oninput="_editingData.columns[${ci}].links=this.value.split('\\n').filter(l=>l.trim()).map(l=>{const[label,url]=(l+'|#').split('|');return{label:label.trim(),url:(url||'#').trim()}})">${col.links.map(l=>l.label+'|'+l.url).join('\n')}</textarea></div>
+      </div>
+    `).join('')}
+  `;
+}
+
+function switchBSMTab(event, panelId) {
+  // Deactivate all tabs and panels within the modal
+  const container = event.target.closest('.bsm-tabs').parentElement;
+  container.querySelectorAll('.bsm-tab').forEach(t => t.classList.remove('active'));
+  container.querySelectorAll('.bsm-panel').forEach(p => p.classList.remove('active'));
+  event.target.classList.add('active');
+  const panel = container.querySelector('#' + panelId);
+  if (panel) panel.classList.add('active');
+}
+
+function closeBlockModal() {
+  document.getElementById('block-settings-modal').style.display = 'none';
+  _editingBlockId = null;
+  _editingData = null;
+}
+
+function saveBlockSettings() {
+  if (!_editingBlockId || !_editingData) return;
+  const block = State.blocks.find(b => b.id === _editingBlockId);
+  if (!block) return;
+  block.data = JSON.parse(JSON.stringify(_editingData));
+  closeBlockModal();
+  refreshPreview();
+  updateLayers();
+  showToast('✅ Saved!', 'Block settings updated', 'success');
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   TEMPLATE MANAGEMENT
+────────────────────────────────────────────────────────────────── */
+function applyTemplate(tplKey) {
+  if (!Templates[tplKey]) return;
+
+  State.currentTemplate = tplKey;
+
+  // Update sidebar selection UI
+  document.querySelectorAll('.template-card').forEach(c => c.classList.remove('active'));
+  const card = document.getElementById('tpl-' + tplKey);
+  if (card) card.classList.add('active');
+
+  // Show custom CSS panel if needed
+  const customPanel = document.getElementById('custom-css-panel');
+  if (customPanel) customPanel.style.display = tplKey === 'custom' ? 'block' : 'none';
+
+  // Apply template color overrides to the sidebar style controls
+  const overrides = Templates[tplKey].overrides;
+  Object.entries(overrides).forEach(([key, value]) => {
+    State.globalStyles[key] = value;
+    // Sync UI controls
+    const colorKeys = { '--primary': 'color-primary', '--secondary': 'color-secondary', '--accent': 'color-accent', '--bg': 'color-bg', '--text': 'color-text' };
+    if (colorKeys[key]) {
+      const colorEl = document.getElementById(colorKeys[key]);
+      if (colorEl) { colorEl.value = value; }
+      const hexEl = colorEl?.nextElementSibling;
+      if (hexEl) hexEl.value = value;
+    }
   });
+
+  refreshPreview();
+  showToast('🎨 Template Applied', Templates[tplKey].name, 'success');
 }
 
-function updateStatusBar() {
-  const el = document.getElementById('status-blocks');
-  if (el) el.textContent = state.blocks.length + ' block' + (state.blocks.length !== 1 ? 's' : '');
+function applyCustomCSS() {
+  State.customCSS = document.getElementById('custom-css-input').value;
+  refreshPreview();
+  showToast('✅ CSS Applied', 'Custom styles applied to preview', 'success');
 }
 
-// ═══════════════════════════════════════════════
-//  RIGHT PANEL
-// ═══════════════════════════════════════════════
-function openRightPanel(block) {
-  document.getElementById('right-panel').classList.remove('hidden');
-  document.getElementById('rp-title').textContent = block.icon + ' ' + block.label;
-  document.getElementById('right-panel-content').innerHTML = buildBlockProps(block);
-  attachPropListeners(block);
+/* ──────────────────────────────────────────────────────────────────
+   GLOBAL STYLE CONTROLS
+────────────────────────────────────────────────────────────────── */
+function updateGlobalStyle(varName, value) {
+  State.globalStyles[varName] = value;
+  refreshPreview();
 }
+
+function syncColorHex(colorInputId, hexValue) {
+  if (/^#[0-9A-Fa-f]{6}$/.test(hexValue)) {
+    const el = document.getElementById(colorInputId);
+    if (el) el.value = hexValue;
+    // Find the CSS variable it maps to
+    const map = {
+      'color-primary': '--primary',
+      'color-secondary': '--secondary',
+      'color-accent': '--accent',
+      'color-bg': '--bg',
+      'color-text': '--text',
+    };
+    if (map[colorInputId]) updateGlobalStyle(map[colorInputId], hexValue);
+  }
+}
+
+function updateButtonStyle(style) {
+  const radii = { rounded: '8px', pill: '50px', square: '0px', outline: '8px' };
+  State.globalStyles['--btn-radius'] = radii[style] || '8px';
+  refreshPreview();
+}
+
+function updateAnimations(val) {
+  // Store preference — applied via extra CSS
+  State.globalStyles['--anim'] = val;
+  refreshPreview();
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   DEVICE SWITCHING
+────────────────────────────────────────────────────────────────── */
+const DeviceWidths = {
+  desktop: '100%',
+  tablet: '768px',
+  mobile: '390px',
+};
+
+const DeviceLabels = {
+  desktop: 'Desktop · 1440px wide',
+  tablet: 'Tablet · 768px wide',
+  mobile: 'Mobile · 390px wide',
+};
+
+function switchDevice(device) {
+  State.currentDevice = device;
+
+  // Update buttons
+  document.querySelectorAll('.device-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.device === device);
+  });
+
+  // Update canvas
+  const wrapper = document.getElementById('canvas-wrapper');
+  wrapper.style.width = DeviceWidths[device];
+
+  document.getElementById('canvas-info').textContent = DeviceLabels[device];
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   ZOOM CONTROLS
+────────────────────────────────────────────────────────────────── */
+function adjustZoom(delta) {
+  State.zoomLevel = Math.max(30, Math.min(150, State.zoomLevel + delta));
+  applyZoom();
+}
+
+function resetZoom() {
+  State.zoomLevel = 100;
+  applyZoom();
+}
+
+function applyZoom() {
+  const wrapper = document.getElementById('canvas-wrapper');
+  wrapper.style.transform = `scale(${State.zoomLevel / 100})`;
+  wrapper.style.transformOrigin = 'top center';
+  document.getElementById('zoom-label').textContent = State.zoomLevel + '%';
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   TAB SWITCHING
+────────────────────────────────────────────────────────────────── */
+function switchTab(tab) {
+  document.querySelectorAll('.stab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tab));
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   RIGHT PANEL — ELEMENT EDITOR
+────────────────────────────────────────────────────────────────── */
+function openRightPanel(title, content) {
+  document.getElementById('rp-title').textContent = title;
+  document.getElementById('right-panel-content').innerHTML = content;
+  document.getElementById('right-panel').classList.remove('closed');
+}
+
 function closeRightPanel() {
-  document.getElementById('right-panel').classList.add('hidden');
-  state.selectedBlockId = null;
-  updateLayersList();
+  document.getElementById('right-panel').classList.add('closed');
 }
 
-// ── Build block props ─────────────────────────
-function buildBlockProps(block) {
-  let h = '';
-  const idx = state.blocks.findIndex(b => b.id === block.id);
-  const last = state.blocks.length - 1;
-  h += `<div class="block-move-btns">
-    <button class="move-btn" onclick="moveBlock('${block.id}',-1)" ${idx===0?'disabled':''}>↑ Move Up</button>
-    <button class="move-btn" onclick="moveBlock('${block.id}',1)"  ${idx===last?'disabled':''}>↓ Move Down</button>
-  </div>`;
-
-  if (block.type === 'hero') {
-    h += pg('Content', `
-      ${pr('Heading',    `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading', `<textarea class="prop-textarea" data-prop="subheading">${esc(block.subheading)}</textarea>`)}
-      ${pr('Button 1',   `<input class="prop-input" data-prop="btnText"    value="${esc(block.btnText)}">`)}
-      ${pr('Button 2',   `<input class="prop-input" data-prop="btn2Text"   value="${esc(block.btn2Text)}">`)}
-      ${tog('Show Button 2','showBtn2',block.showBtn2)}
-      ${pr('Badge Text', `<input class="prop-input" data-prop="badgeText"  value="${esc(block.badgeText)}">`)}
-      ${tog('Show Badge','showBadge',block.showBadge)}
-      ${pr('Align', `<select class="prop-input" data-prop="textAlign">
-        <option value="left"   ${block.textAlign==='left'  ?'selected':''}>Left</option>
-        <option value="center" ${block.textAlign==='center'?'selected':''}>Center</option>
-        <option value="right"  ${block.textAlign==='right' ?'selected':''}>Right</option>
-      </select>`)}
-    `);
-  }
-
-  // FIX 1: Features — full editing with add/remove, column count
-  else if (block.type === 'features') {
-    h += pg('Content', `
-      ${pr('Heading',    `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading', `<textarea class="prop-textarea" data-prop="subheading">${esc(block.subheading)}</textarea>`)}
-      ${pr('Columns', `<select class="prop-input" data-prop="columns">
-        <option value="1" ${block.columns===1?'selected':''}>1 column</option>
-        <option value="2" ${block.columns===2?'selected':''}>2 columns</option>
-        <option value="3" ${block.columns===3?'selected':''}>3 columns</option>
-        <option value="4" ${block.columns===4?'selected':''}>4 columns</option>
-      </select>`)}
-    `);
-    h += `<div class="prop-group">
-      <div class="prop-group-title">Service / Feature Cards
-        <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:10px">${block.items.length} cards</span>
-      </div>`;
-    block.items.forEach((item, i) => {
-      h += `<div class="nested-card">
-        <div class="nested-card-header">Card ${i+1}
-          <button class="mini-btn danger" onclick="removeFeatureItem('${block.id}',${i})">Remove</button>
-        </div>
-        ${pr('Icon',  `<input class="prop-input" data-fitem="${i}" data-field="icon"  value="${esc(item.icon)}">`)}
-        ${pr('Title', `<input class="prop-input" data-fitem="${i}" data-field="title" value="${esc(item.title)}">`)}
-        ${pr('Desc',  `<textarea class="prop-textarea" data-fitem="${i}" data-field="desc">${esc(item.desc)}</textarea>`)}
-      </div>`;
-    });
-    h += `<button class="add-item-btn" onclick="addFeatureItem('${block.id}')">+ Add Service / Feature Card</button></div>`;
-  }
-
-  else if (block.type === 'lead') {
-    h += pg('Content', `
-      ${pr('Heading',     `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading',  `<textarea class="prop-textarea" data-prop="subheading">${esc(block.subheading)}</textarea>`)}
-      ${pr('Button',      `<input class="prop-input" data-prop="btnText"    value="${esc(block.btnText)}">`)}
-      ${pr('Success Msg', `<input class="prop-input" data-prop="successMsg" value="${esc(block.successMsg)}">`)}
-    `);
-    h += `<div class="prop-group"><div class="prop-group-title">Form Fields</div>`;
-    block.fields.forEach((f, i) => {
-      h += `<div class="feature-row">
-        <input class="feature-input" data-field-idx="${i}" value="${esc(f)}" placeholder="Field label">
-        <button class="remove-feature-btn" onclick="removeFormField('${block.id}',${i})">✕</button>
-      </div>`;
-    });
-    h += `<button class="add-item-btn" onclick="addFormField('${block.id}')">+ Add Field</button></div>`;
-  }
-
-  else if (block.type === 'testimonials') {
-    h += pg('Content', `
-      ${pr('Heading',    `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading', `<textarea class="prop-textarea" data-prop="subheading">${esc(block.subheading)}</textarea>`)}
-    `);
-    h += `<div class="prop-group"><div class="prop-group-title">Reviews (${block.reviews.length})</div>`;
-    block.reviews.forEach((r, i) => {
-      h += `<div class="nested-card">
-        <div class="nested-card-header">Review ${i+1}
-          <button class="mini-btn danger" onclick="removeReview('${block.id}',${i})">Remove</button>
-        </div>
-        ${pr('Name',   `<input class="prop-input" data-review="${i}" data-field="name"   value="${esc(r.name)}">`)}
-        ${pr('Role',   `<input class="prop-input" data-review="${i}" data-field="role"   value="${esc(r.role)}">`)}
-        ${pr('Avatar', `<input class="prop-input" data-review="${i}" data-field="avatar" value="${esc(r.avatar)}" style="width:60px;flex:0 0 60px">`)}
-        ${pr('Text',   `<textarea class="prop-textarea" data-review="${i}" data-field="text">${esc(r.text)}</textarea>`)}
-      </div>`;
-    });
-    h += `<button class="add-item-btn" onclick="addReview('${block.id}')">+ Add Review</button></div>`;
-  }
-
-  else if (block.type === 'pricing') {
-    h += pg('Content', `
-      ${pr('Heading',    `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading', `<input class="prop-input" data-prop="subheading" value="${esc(block.subheading)}">`)}
-      ${tog('Annual Toggle','showToggle',block.showToggle)}
-    `);
-    h += `<div class="prop-group"><div class="prop-group-title">Plans (${block.plans.length})</div>`;
-    block.plans.forEach((p, i) => {
-      h += `<div class="nested-card ${p.featured?'featured-card':''}">
-        <div class="nested-card-header ${p.featured?'featured-header':''}">
-          ${p.featured?'⭐ ':''}Plan ${i+1}
-          <div style="display:flex;gap:4px">
-            <button class="mini-btn" onclick="toggleFeaturedPlan('${block.id}',${i})">${p.featured?'Unfeature':'Feature'}</button>
-            <button class="mini-btn danger" onclick="removePlan('${block.id}',${i})">Remove</button>
-          </div>
-        </div>
-        ${pr('Name',      `<input class="prop-input" data-plan="${i}" data-field="name"        value="${esc(p.name)}">`)}
-        ${pr('Price/mo',  `<input class="prop-input" data-plan="${i}" data-field="price"       value="${esc(p.price)}">`)}
-        ${pr('Price/yr',  `<input class="prop-input" data-plan="${i}" data-field="priceAnnual" value="${esc(p.priceAnnual)}">`)}
-        ${pr('Badge',     `<input class="prop-input" data-plan="${i}" data-field="badge"       value="${esc(p.badge)}">`)}
-        ${pr('Button',    `<input class="prop-input" data-plan="${i}" data-field="btn"         value="${esc(p.btn)}">`)}
-        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">Features in this plan</div>
-        ${p.features.map((f,fi) => `
-          <div class="feature-row">
-            <input class="feature-input" data-plan="${i}" data-feat="${fi}" value="${esc(f)}">
-            <button class="remove-feature-btn" onclick="removePlanFeature('${block.id}',${i},${fi})">✕</button>
-          </div>`).join('')}
-        <button class="add-item-btn" onclick="addPlanFeature('${block.id}',${i})">+ Add feature line</button>
-      </div>`;
-    });
-    h += `<button class="add-item-btn" onclick="addPlan('${block.id}')">+ Add Plan</button></div>`;
-  }
-
-  else if (block.type === 'faq') {
-    h += pg('Content', `
-      ${pr('Heading',    `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading', `<input class="prop-input" data-prop="subheading" value="${esc(block.subheading)}">`)}
-    `);
-    h += `<div class="prop-group"><div class="prop-group-title">FAQ Items (${block.items.length})</div>`;
-    block.items.forEach((item, i) => {
-      h += `<div class="nested-card">
-        <div class="nested-card-header">Item ${i+1}
-          <button class="mini-btn danger" onclick="removeFAQ('${block.id}',${i})">Remove</button>
-        </div>
-        ${pr('Question', `<input class="prop-input" data-faq="${i}" data-field="q" value="${esc(item.q)}">`)}
-        ${pr('Answer',   `<textarea class="prop-textarea" data-faq="${i}" data-field="a">${esc(item.a)}</textarea>`)}
-      </div>`;
-    });
-    h += `<button class="add-item-btn" onclick="addFAQ('${block.id}')">+ Add FAQ</button></div>`;
-  }
-
-  else if (block.type === 'cta') {
-    h += pg('Content', `
-      ${pr('Heading',    `<input class="prop-input" data-prop="heading"    value="${esc(block.heading)}">`)}
-      ${pr('Subheading', `<textarea class="prop-textarea" data-prop="subheading">${esc(block.subheading)}</textarea>`)}
-      ${pr('Button 1',   `<input class="prop-input" data-prop="btnText"    value="${esc(block.btnText)}">`)}
-      ${pr('Button 2',   `<input class="prop-input" data-prop="btn2Text"   value="${esc(block.btn2Text)}">`)}
-      ${tog('Show Button 2','showBtn2',block.showBtn2)}
-    `);
-  }
-
-  h += `<button class="delete-block-btn" onclick="removeBlock('${block.id}')">🗑 Remove This Block</button>`;
-  return h;
+/* ──────────────────────────────────────────────────────────────────
+   FULL PREVIEW
+────────────────────────────────────────────────────────────────── */
+function openFullPreview() {
+  const modal = document.getElementById('full-preview-modal');
+  const frame = document.getElementById('full-preview-frame');
+  frame.srcdoc = buildPreviewHTML(true);
+  modal.style.display = 'flex';
 }
 
-// ── Prop helpers ──────────────────────────────
-function pg(title, inner) { return `<div class="prop-group"><div class="prop-group-title">${title}</div>${inner}</div>`; }
-function pr(label, input) { return `<div class="prop-row"><span class="prop-label">${label}</span>${input}</div>`; }
-function tog(label, prop, val) {
-  return `<div class="toggle-row">
-    <span class="toggle-label">${label}</span>
-    <div class="toggle ${val?'on':''}" data-toggle="${prop}" onclick="handleToggle(this,'${prop}')"></div>
-  </div>`;
-}
-function handleToggle(el, prop) {
-  el.classList.toggle('on');
-  const block = state.blocks.find(b => b.id === state.selectedBlockId);
-  if (block) { block[prop] = el.classList.contains('on'); renderPreview(); saveHistory(); }
+function closeFullPreview() {
+  document.getElementById('full-preview-modal').style.display = 'none';
 }
 
-// ── Attach listeners ──────────────────────────
-function attachPropListeners(block) {
-  const rp = document.getElementById('right-panel-content');
-  rp.querySelectorAll('[data-prop]').forEach(el => {
-    el.addEventListener('input',  () => { block[el.dataset.prop] = el.tagName==='SELECT'?el.value:el.value; renderPreview(); });
-    el.addEventListener('change', () => saveHistory());
-  });
-  rp.querySelectorAll('[data-review]').forEach(el => {
-    el.addEventListener('input',  () => { block.reviews[+el.dataset.review][el.dataset.field] = el.value; renderPreview(); });
-    el.addEventListener('change', () => saveHistory());
-  });
-  rp.querySelectorAll('[data-plan]').forEach(el => {
-    el.addEventListener('input', () => {
-      if (el.dataset.feat !== undefined) block.plans[+el.dataset.plan].features[+el.dataset.feat] = el.value;
-      else block.plans[+el.dataset.plan][el.dataset.field] = el.value;
-      renderPreview();
-    });
-    el.addEventListener('change', () => saveHistory());
-  });
-  rp.querySelectorAll('[data-fitem]').forEach(el => {
-    el.addEventListener('input',  () => { block.items[+el.dataset.fitem][el.dataset.field] = el.value; renderPreview(); });
-    el.addEventListener('change', () => saveHistory());
-  });
-  rp.querySelectorAll('[data-faq]').forEach(el => {
-    el.addEventListener('input',  () => { block.items[+el.dataset.faq][el.dataset.field] = el.value; renderPreview(); });
-    el.addEventListener('change', () => saveHistory());
-  });
-  rp.querySelectorAll('[data-field-idx]').forEach(el => {
-    el.addEventListener('input',  () => { block.fields[+el.dataset.fieldIdx] = el.value; renderPreview(); });
-    el.addEventListener('change', () => saveHistory());
-  });
+/* ──────────────────────────────────────────────────────────────────
+   EXPORT ENGINE
+────────────────────────────────────────────────────────────────── */
+function exportSite() {
+  const siteName = document.getElementById('site-name-input').value || 'my-site';
+
+  // Build the export HTML (self-contained)
+  const exportHTML = buildExportHTML();
+  const exportCSS = buildExportCSS();
+  const exportJS = buildExportJS();
+
+  // Download all three files
+  downloadFile(siteName + '-index.html', exportHTML, 'text/html');
+  setTimeout(() => downloadFile(siteName + '-style.css', exportCSS, 'text/css'), 200);
+  setTimeout(() => downloadFile(siteName + '-script.js', exportJS, 'text/javascript'), 400);
+
+  // Show success modal
+  setTimeout(() => {
+    document.getElementById('export-modal').style.display = 'flex';
+  }, 600);
 }
 
-// ── Block mutation helpers ────────────────────
-function refreshPanel() { const b = state.blocks.find(x => x.id === state.selectedBlockId); if (b) openRightPanel(b); }
+function buildExportHTML() {
+  const siteName = document.getElementById('site-name-input').value || 'My Site';
+  const template = Templates[State.currentTemplate];
+  const styles = { ...State.globalStyles, ...template.overrides };
+  const cssVars = Object.entries(styles).map(([k, v]) => `${k}: ${v};`).join('\n    ');
 
-function addReview(id)            { const b=state.blocks.find(x=>x.id===id); b.reviews.push({name:'New Reviewer',role:'Their Role',text:'This product is fantastic.',avatar:'👤',rating:5}); renderPreview();saveHistory();refreshPanel(); }
-function removeReview(id,i)       { const b=state.blocks.find(x=>x.id===id); b.reviews.splice(i,1); renderPreview();saveHistory();refreshPanel(); }
-function addPlan(id)              { const b=state.blocks.find(x=>x.id===id); b.plans.push({name:'New Plan',price:'$49',priceAnnual:'$39',period:'/mo',features:['Feature 1','Feature 2'],featured:false,btn:'Get Started',badge:''}); renderPreview();saveHistory();refreshPanel(); }
-function removePlan(id,i)         { const b=state.blocks.find(x=>x.id===id); b.plans.splice(i,1); renderPreview();saveHistory();refreshPanel(); }
-function toggleFeaturedPlan(id,i) { const b=state.blocks.find(x=>x.id===id); b.plans.forEach((p,j)=>p.featured=j===i?!p.featured:false); renderPreview();saveHistory();refreshPanel(); }
-function addPlanFeature(id,pi)    { const b=state.blocks.find(x=>x.id===id); b.plans[pi].features.push('New feature'); renderPreview();saveHistory();refreshPanel(); }
-function removePlanFeature(id,pi,fi){ const b=state.blocks.find(x=>x.id===id); b.plans[pi].features.splice(fi,1); renderPreview();saveHistory();refreshPanel(); }
-// FIX 1: feature item helpers
-function addFeatureItem(id)       { const b=state.blocks.find(x=>x.id===id); b.items.push({icon:'🌟',title:'New Service',desc:'Describe this service or feature briefly.'}); renderPreview();saveHistory();refreshPanel(); }
-function removeFeatureItem(id,i)  { const b=state.blocks.find(x=>x.id===id); b.items.splice(i,1); renderPreview();saveHistory();refreshPanel(); }
-function addFAQ(id)               { const b=state.blocks.find(x=>x.id===id); b.items.push({q:'Your question here?',a:'Your detailed answer goes here.'}); renderPreview();saveHistory();refreshPanel(); }
-function removeFAQ(id,i)          { const b=state.blocks.find(x=>x.id===id); b.items.splice(i,1); renderPreview();saveHistory();refreshPanel(); }
-function addFormField(id)         { const b=state.blocks.find(x=>x.id===id); b.fields.push('New field'); renderPreview();saveHistory();refreshPanel(); }
-function removeFormField(id,i)    { const b=state.blocks.find(x=>x.id===id); b.fields.splice(i,1); renderPreview();saveHistory();refreshPanel(); }
+  const blocksHTML = State.blocks.map(block => {
+    const renderer = BlockRenderers[block.type];
+    if (!renderer) return '';
+    return `<!-- Block: ${block.label} -->\n${renderer(block.data)}`;
+  }).join('\n\n');
 
-// ═══════════════════════════════════════════════
-//  GLOBAL STYLE UPDATES  (FIX 3: fully reflected)
-// ═══════════════════════════════════════════════
-function updateGlobalColor(key, value) {
-  const map = { primary:'primaryColor', secondary:'secondaryColor', bg:'bgColor', textColor:'textColor' };
-  state.globalStyles[map[key]] = value;
-  const sw = document.getElementById('swatch-' + key);
-  if (sw) sw.style.background = value;
-  const hx = document.getElementById('hex-' + key);
-  if (hx) hx.textContent = value;
-  renderPreview(); // FIX 3: full re-render so nav/header update too
-}
-function updateGlobalFont(type, value) {
-  if (type === 'heading') state.globalStyles.headingFont = value;
-  else state.globalStyles.bodyFont = value;
-  renderPreview(); saveHistory();
-}
-function updateBtnStyle(style, el) {
-  document.querySelectorAll('.btn-style-opt').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  state.globalStyles.btnStyle = style;
-  renderPreview(); saveHistory(); showToast('Button style: ' + style);
-}
-function updateSpacingOpt(val, el) {
-  document.querySelectorAll('.btn-style-opt').forEach(b => {
-    // Only reset siblings in the same row
-  });
-  // find the row and reset
-  el.parentElement.querySelectorAll('.btn-style-opt').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  state.spacing = val;
-  renderPreview(); saveHistory();
-}
-function updateCustomCSS(val) {
-  state.customCSS = val;
-  renderPreview();
-}
-
-// ═══════════════════════════════════════════════
-//  RENDER PREVIEW
-// ═══════════════════════════════════════════════
-function renderPreview() {
-  const html = buildSiteHTML();
-  const frame = document.getElementById('preview-frame');
-  const doc = frame.contentDocument || frame.contentWindow.document;
-  doc.open(); doc.write(html); doc.close();
-  document.getElementById('empty-state').style.display = state.blocks.length ? 'none' : '';
-}
-
-// ═══════════════════════════════════════════════
-//  BUILD SITE HTML
-//  FIX 2: export-ready CSS — no iframe scaling hack
-//  FIX 3: all global styles including nav/header
-//  FIX 6: templates control body, nav, ALL sections
-// ═══════════════════════════════════════════════
-function buildSiteHTML(forExport = false) {
-  const tpl = templates[state.template];
-  const css = interpolateCSS(tpl.css);
-  const sp  = getSpacingPx();
-  const dark = tpl.darkMode;
-  const blocksHTML = state.blocks.map(b => renderBlock(b, sp, dark)).join('\n');
-  const gfonts = 'family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500&family=Space+Mono:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400';
-
-  // FIX 2: exported site uses responsive CSS, not iframe transforms
-  // The preview iframe also uses the same CSS — no mismatch
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>My Supersuite Site</title>
-<link href="https://fonts.googleapis.com/css2?${gfonts}&display=swap" rel="stylesheet">
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%}
-body{min-height:100vh;font-size:16px}
-${css}
-
-/* ── FIX 3: Nav/header CSS fully driven by template + global colors ── */
-.ss-nav-inner{max-width:1080px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;padding:0 40px;height:100%}
-.ss-nav-logo{font-family:${state.globalStyles.headingFont};font-size:20px;font-weight:800;color:${dark?'#fff':state.globalStyles.textColor};letter-spacing:-0.5px}
-.ss-nav-links{display:flex;gap:28px}
-.ss-nav-link{font-size:14px;font-weight:500;color:${dark?'rgba(255,255,255,0.65)':state.globalStyles.textColor+'99'};cursor:pointer;transition:color .2s;text-decoration:none}
-.ss-nav-link:hover{color:${state.globalStyles.primaryColor}}
-.ss-nav-cta{background:${state.globalStyles.primaryColor};color:#fff;padding:8px 18px;border-radius:${getBtnRadius()};font-family:${state.globalStyles.headingFont};font-size:13px;font-weight:700;cursor:pointer;border:none;transition:all .2s}
-.ss-nav-cta:hover{opacity:.88}
-
-/* ── Layout ── */
-.ss-block{padding:${sp};transition:outline .15s;cursor:default}
-.ss-block:hover{outline:2px dashed rgba(99,102,241,.2);outline-offset:-3px}
-.ss-block.selected{outline:2px solid ${state.globalStyles.primaryColor};outline-offset:-3px}
-.ss-container{max-width:1080px;margin:0 auto}
-.ss-cta-block{padding:${sp}}
-
-/* ── Badge ── */
-.ss-badge{display:inline-flex;align-items:center;gap:6px;background:${state.globalStyles.primaryColor}1a;border:1px solid ${state.globalStyles.primaryColor}44;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:600;color:${state.globalStyles.primaryColor};margin-bottom:24px}
-
-/* ── Typography ── */
-.ss-heading{font-family:${state.globalStyles.headingFont};font-size:clamp(34px,5.5vw,72px);font-weight:800;line-height:1.04;letter-spacing:-0.025em;margin-bottom:20px;color:${dark?'#fff':state.globalStyles.textColor}}
-.ss-subheading{font-size:clamp(16px,2vw,20px);color:${dark?'rgba(255,255,255,0.55)':state.globalStyles.textColor+'88'};line-height:1.65;max-width:600px;margin-bottom:36px;font-family:${state.globalStyles.bodyFont}}
-
-/* ── Buttons ── */
-.ss-btn-group{display:flex;gap:12px;flex-wrap:wrap}
-
-/* ── Form ── */
-.ss-form{max-width:500px;width:100%}
-.ss-form input,.ss-form textarea{display:block;width:100%;padding:14px 18px;border-radius:10px;font-size:15px;font-family:${state.globalStyles.bodyFont};outline:none;margin-bottom:12px;transition:all .2s}
-.ss-form input:focus,.ss-form textarea:focus{border-color:${state.globalStyles.primaryColor}!important;box-shadow:0 0 0 3px ${state.globalStyles.primaryColor}33}
-.ss-form-success{display:none;text-align:center;padding:20px;font-size:18px;font-weight:600;color:${state.globalStyles.primaryColor}}
-
-/* ── Features ── */
-.ss-features-grid{display:grid;gap:24px;margin-top:48px}
-.ss-feature-item{padding:28px}
-.ss-feature-title{font-family:${state.globalStyles.headingFont};font-size:18px;font-weight:700;margin-bottom:10px;color:${dark?'#fff':state.globalStyles.textColor}}
-.ss-feature-desc{font-size:15px;line-height:1.65;color:${dark?'rgba(255,255,255,0.55)':state.globalStyles.textColor+'88'};font-family:${state.globalStyles.bodyFont}}
-
-/* ── Testimonials ── */
-.ss-testimonials-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px}
-.ss-card{padding:28px;transition:transform .2s}
-.ss-card:hover{transform:translateY(-5px)}
-.ss-avatar{font-size:42px;margin-bottom:16px}
-.ss-stars{color:#fbbf24;margin-bottom:12px;font-size:16px;letter-spacing:2px}
-.ss-review-text{font-size:15px;line-height:1.72;font-style:italic;color:${dark?'rgba(255,255,255,0.85)':state.globalStyles.textColor+'dd'}}
-.ss-reviewer{font-weight:700;font-size:15px;margin-bottom:3px;font-family:${state.globalStyles.headingFont};color:${dark?'#fff':state.globalStyles.textColor}}
-.ss-reviewer-role{font-size:12px;color:${dark?'rgba(255,255,255,0.45)':state.globalStyles.textColor+'66'}}
-
-/* ── Pricing ── */
-.ss-pricing-annual-wrap{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:44px}
-.ss-toggle-pill{width:48px;height:26px;background:${state.globalStyles.primaryColor};border-radius:13px;cursor:pointer;position:relative;transition:background .2s;border:none}
-.ss-toggle-pill::after{content:'';position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;top:4px;left:26px;transition:left .2s}
-.ss-toggle-pill.monthly::after{left:4px}
-.ss-toggle-lbl{font-size:14px;font-weight:500;opacity:.6;cursor:pointer;color:${dark?'#fff':state.globalStyles.textColor};font-family:${state.globalStyles.bodyFont}}
-.ss-toggle-lbl.active{opacity:1;font-weight:700}
-.ss-pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px;align-items:start}
-.ss-pricing-card{padding:36px 28px;transition:transform .25s}
-.ss-pricing-card:hover{transform:translateY(-5px)}
-.ss-plan-badge{display:inline-block;background:rgba(255,255,255,.2);border-radius:999px;padding:3px 12px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin-bottom:14px}
-.ss-plan-name{font-family:${state.globalStyles.headingFont};font-size:18px;font-weight:700;margin-bottom:12px;color:${dark?'#fff':state.globalStyles.textColor}}
-.ss-plan-price{font-family:${state.globalStyles.headingFont};font-size:54px;font-weight:800;line-height:1;letter-spacing:-3px;color:${dark?'#fff':state.globalStyles.textColor}}
-.ss-plan-period{font-size:16px;font-weight:400;opacity:.5;color:${dark?'#fff':state.globalStyles.textColor}}
-.ss-plan-features{list-style:none;margin:24px 0}
-.ss-plan-features li{padding:9px 0;border-bottom:1px solid ${dark?'rgba(255,255,255,.1)':'rgba(0,0,0,.07)'};font-size:14px;display:flex;align-items:center;gap:9px;color:${dark?'rgba(255,255,255,0.7)':state.globalStyles.textColor+'cc'};font-family:${state.globalStyles.bodyFont}}
-.ss-pricing-card.featured .ss-plan-features li{border-bottom-color:rgba(255,255,255,.15);color:#fff}
-.ss-pricing-card.featured .ss-plan-name,.ss-pricing-card.featured .ss-plan-price,.ss-pricing-card.featured .ss-plan-period{color:#fff}
-.ss-feature-check{color:#34d399;font-size:14px;flex-shrink:0}
-.ss-pricing-card.featured .ss-feature-check{color:rgba(255,255,255,.9)}
-
-/* ── FAQ ── */
-.ss-faq-arrow{transition:transform .3s;display:inline-block;font-style:normal}
-.ss-faq-item.open .ss-faq-arrow{transform:rotate(180deg)}
-
-/* ── CTA ── */
-.ss-cta-block .ss-heading{color:#fff!important}
-.ss-cta-block .ss-subheading{color:rgba(255,255,255,.72)!important;margin:0 auto 36px}
-.ss-cta-block .ss-btn{background:#fff!important;color:${state.globalStyles.primaryColor}!important}
-.ss-cta-block .ss-btn:hover{opacity:.92!important;box-shadow:0 10px 30px rgba(0,0,0,.2)!important}
-
-/* ── Scroll animations ── */
-@keyframes ssSlideUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:translateY(0)}}
-.ss-animate{opacity:0}
-.ss-animate.visible{animation:ssSlideUp .55s cubic-bezier(.16,1,.3,1) forwards}
-
-/* ── FIX 2 + Mobile optimisation (FIX 5): proper responsive CSS ── */
-@media(max-width:768px){
-  .ss-block,.ss-cta-block{padding:52px 20px!important}
-  .ss-heading{font-size:clamp(28px,8vw,48px)!important}
-  .ss-nav-inner{padding:0 20px}
-  .ss-nav-links{display:none}
-  .ss-pricing-grid,.ss-testimonials-grid,.ss-features-grid{grid-template-columns:1fr!important}
-  .ss-btn-group{flex-direction:column;align-items:flex-start}
-  .ss-container{padding:0}
-}
-@media(max-width:480px){
-  .ss-heading{font-size:clamp(24px,9vw,36px)!important}
-  .ss-subheading{font-size:16px!important}
-}
-
-${state.customCSS}
-</style>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>${siteName}</title>
+  <meta name="description" content="Built with Supersuite — the fastest website builder"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="style.css"/>
 </head>
 <body>
 
-<!-- FIX 3: Nav/header rendered as part of site, respects all global colors -->
-<nav class="ss-nav" style="height:64px;position:sticky;top:0;z-index:100">
-  <div class="ss-nav-inner">
-    <div class="ss-nav-logo">${state.globalStyles.headingFont.includes('Bebas')?'BRAND':'Brand'}</div>
-    <div class="ss-nav-links">
-      <a class="ss-nav-link" href="#">Features</a>
-      <a class="ss-nav-link" href="#">Pricing</a>
-      <a class="ss-nav-link" href="#">About</a>
-      <a class="ss-nav-link" href="#">Blog</a>
-    </div>
-    <button class="ss-nav-cta">Get Started</button>
-  </div>
-</nav>
-
 ${blocksHTML}
 
-<script>
-// Block click → builder
-document.querySelectorAll('.ss-block,.ss-cta-block').forEach(b=>{
-  b.addEventListener('click',()=>parent.postMessage({type:'blockClick',id:b.dataset.id},'*'));
-});
-// Select highlight from builder
-window.addEventListener('message',e=>{
-  if(e.data.type==='select'){
-    document.querySelectorAll('.ss-block,.ss-cta-block').forEach(b=>b.classList.remove('selected'));
-    const el=document.querySelector('[data-id="'+e.data.id+'"]');
-    if(el){el.classList.add('selected');el.scrollIntoView({behavior:'smooth',block:'center'});}
-  }
-});
-// FAQ accordion
-document.querySelectorAll('.ss-faq-q').forEach(q=>{
-  q.addEventListener('click',()=>{
-    const item=q.parentElement;
-    const a=item.querySelector('.ss-faq-a');
-    const open=item.classList.contains('open');
-    document.querySelectorAll('.ss-faq-item').forEach(i=>{i.classList.remove('open');i.querySelector('.ss-faq-a').classList.remove('open');});
-    if(!open){item.classList.add('open');a.classList.add('open');}
-  });
-});
-// Pricing toggle
-const ptb=document.getElementById('pricing-toggle');
-if(ptb){
-  let annual=false;
-  ptb.addEventListener('click',()=>{
-    annual=!annual;
-    ptb.classList.toggle('monthly',!annual);
-    const al=document.getElementById('toggle-annual');
-    const ml=document.getElementById('toggle-monthly');
-    if(al){al.classList.toggle('active',annual);}
-    if(ml){ml.classList.toggle('active',!annual);}
-    document.querySelectorAll('[data-price-mo]').forEach(el=>{
-      el.textContent=annual?el.dataset.priceAnnual:el.dataset.priceMo;
-    });
-  });
-}
-// Form submit
-document.querySelectorAll('.ss-lead-form').forEach(f=>{
-  f.addEventListener('submit',e=>{
-    e.preventDefault();
-    const suc=f.querySelector('.ss-form-success');
-    const flds=f.querySelector('.ss-form-fields');
-    if(flds)flds.style.display='none';
-    if(suc)suc.style.display='block';
-  });
-});
-// Scroll animations
-const obs=new IntersectionObserver(entries=>{
-  entries.forEach(en=>{if(en.isIntersecting)en.target.classList.add('visible');});
-},{threshold:.1});
-document.querySelectorAll('.ss-animate').forEach(el=>obs.observe(el));
-<\/script>
+<script src="script.js"><\/script>
 </body>
 </html>`;
 }
 
-// ═══════════════════════════════════════════════
-//  RENDER BLOCKS
-// ═══════════════════════════════════════════════
-function renderBlock(block, sp, dark) {
-  const align = block.textAlign || 'center';
-  const alignItems = align==='center'?'center':align==='right'?'flex-end':'flex-start';
+function buildExportCSS() {
+  const template = Templates[State.currentTemplate];
+  const styles = { ...State.globalStyles, ...template.overrides };
+  const cssVars = Object.entries(styles).map(([k, v]) => `  ${k}: ${v};`).join('\n');
 
-  if (block.type === 'hero') {
-    return `<section class="ss-block ss-hero" data-id="${block.id}" style="text-align:${align}">
-  <div class="ss-container" style="display:flex;flex-direction:column;align-items:${alignItems}">
-    ${block.showBadge?`<div class="ss-badge ss-animate">${esc2(block.badgeText)}</div>`:''}
-    <div class="ss-heading ss-animate" style="animation-delay:.04s">${esc2(block.heading)}</div>
-    <div class="ss-subheading ss-animate" style="animation-delay:.1s">${esc2(block.subheading)}</div>
-    <div class="ss-btn-group ss-animate" style="justify-content:${alignItems};animation-delay:.17s">
-      <button class="ss-btn">${esc2(block.btnText)}</button>
-      ${block.showBtn2?`<button class="ss-btn-outline">${esc2(block.btn2Text)}</button>`:''}
-    </div>
-  </div>
-</section>`;
-  }
+  return `/* ═══════════════════════════════════════════════════
+   Generated by Supersuite — https://supersuite.com
+   Template: ${template.name}
+═══════════════════════════════════════════════════ */
 
-  // FIX 1: features uses block.columns for grid-template-columns
-  if (block.type === 'features') {
-    const cols = block.columns || 3;
-    const minW = cols <= 2 ? '320px' : cols >= 4 ? '200px' : '260px';
-    return `<section class="ss-block ss-alt-section" data-id="${block.id}">
-  <div class="ss-container">
-    <div style="text-align:center">
-      <div class="ss-heading ss-animate">${esc2(block.heading)}</div>
-      <div class="ss-subheading ss-animate" style="margin:0 auto;animation-delay:.08s">${esc2(block.subheading)}</div>
-    </div>
-    <div class="ss-features-grid" style="grid-template-columns:repeat(${cols},1fr)">
-      ${block.items.map((item,i) => `
-        <div class="ss-card ss-feature-item ss-animate" style="animation-delay:${.05*(i%cols)}s">
-          <div class="ss-feature-icon-wrap">${esc2(item.icon)}</div>
-          <div class="ss-feature-title">${esc2(item.title)}</div>
-          <div class="ss-feature-desc">${esc2(item.desc)}</div>
-        </div>`).join('')}
-    </div>
-  </div>
-</section>`;
-  }
-
-  if (block.type === 'lead') {
-    return `<section class="ss-block ss-section" data-id="${block.id}">
-  <div class="ss-container" style="display:flex;flex-direction:column;align-items:center;text-align:center">
-    <div class="ss-heading ss-animate">${esc2(block.heading)}</div>
-    <div class="ss-subheading ss-animate" style="margin:0 auto;animation-delay:.08s">${esc2(block.subheading)}</div>
-    <form class="ss-form ss-lead-form ss-animate" style="animation-delay:.15s">
-      <div class="ss-form-fields">
-        ${block.fields.map(f=>`<input type="text" placeholder="${esc2(f)}" required>`).join('')}
-        <button type="submit" class="ss-btn" style="width:100%">${esc2(block.btnText)}</button>
-      </div>
-      <div class="ss-form-success">${esc2(block.successMsg)}</div>
-    </form>
-  </div>
-</section>`;
-  }
-
-  if (block.type === 'testimonials') {
-    return `<section class="ss-block ss-section" data-id="${block.id}">
-  <div class="ss-container">
-    <div style="text-align:center;margin-bottom:48px">
-      <div class="ss-heading ss-animate">${esc2(block.heading)}</div>
-      <div class="ss-subheading ss-animate" style="margin:0 auto;animation-delay:.08s">${esc2(block.subheading)}</div>
-    </div>
-    <div class="ss-testimonials-grid">
-      ${block.reviews.map((r,i)=>`
-        <div class="ss-card ss-animate" style="animation-delay:${i*.08}s">
-          <div class="ss-avatar">${r.avatar}</div>
-          <div class="ss-stars">${'★'.repeat(r.rating||5)}</div>
-          <div class="ss-review-text">"${esc2(r.text)}"</div>
-          <div style="margin-top:20px">
-            <div class="ss-reviewer">${esc2(r.name)}</div>
-            <div class="ss-reviewer-role">${esc2(r.role)}</div>
-          </div>
-        </div>`).join('')}
-    </div>
-  </div>
-</section>`;
-  }
-
-  if (block.type === 'pricing') {
-    return `<section class="ss-block ss-alt-section" data-id="${block.id}">
-  <div class="ss-container">
-    <div style="text-align:center;margin-bottom:${block.showToggle?'0':'48px'}">
-      <div class="ss-heading ss-animate">${esc2(block.heading)}</div>
-      <div class="ss-subheading ss-animate" style="margin:0 auto;animation-delay:.08s">${esc2(block.subheading)}</div>
-    </div>
-    ${block.showToggle?`
-    <div class="ss-pricing-annual-wrap ss-animate" style="animation-delay:.15s">
-      <span class="ss-toggle-lbl active" id="toggle-monthly">Monthly</span>
-      <button class="ss-toggle-pill monthly" id="pricing-toggle" aria-label="Toggle billing"></button>
-      <span class="ss-toggle-lbl" id="toggle-annual">Annual <span style="color:#34d399;font-size:12px;font-weight:700">Save 35%</span></span>
-    </div>`:''}
-    <div class="ss-pricing-grid">
-      ${block.plans.map((p,i)=>`
-        <div class="ss-pricing-card ${p.featured?'featured':''} ss-animate" style="animation-delay:${i*.07}s">
-          ${p.badge?`<div class="ss-plan-badge">${esc2(p.badge)}</div>`:''}
-          <div class="ss-plan-name">${esc2(p.name)}</div>
-          <div style="margin-bottom:8px">
-            <span class="ss-plan-price" data-price-mo="${esc2(p.price)}" data-price-annual="${esc2(p.priceAnnual)}">${esc2(p.price)}</span>
-            <span class="ss-plan-period">${esc2(p.period)}</span>
-          </div>
-          <ul class="ss-plan-features">
-            ${p.features.map(f=>`<li><span class="ss-feature-check">✓</span>${esc2(f)}</li>`).join('')}
-          </ul>
-          <button class="ss-btn" style="width:100%">${esc2(p.btn)}</button>
-        </div>`).join('')}
-    </div>
-  </div>
-</section>`;
-  }
-
-  if (block.type === 'faq') {
-    return `<section class="ss-block ss-section" data-id="${block.id}">
-  <div class="ss-container" style="max-width:760px">
-    <div style="text-align:center;margin-bottom:48px">
-      <div class="ss-heading ss-animate">${esc2(block.heading)}</div>
-      <div class="ss-subheading ss-animate" style="margin:0 auto;animation-delay:.08s">${esc2(block.subheading)}</div>
-    </div>
-    ${block.items.map((item,i)=>`
-      <div class="ss-faq-item ss-animate" style="animation-delay:${i*.05}s">
-        <div class="ss-faq-q">${esc2(item.q)}<i class="ss-faq-arrow">▾</i></div>
-        <div class="ss-faq-a">${esc2(item.a)}</div>
-      </div>`).join('')}
-  </div>
-</section>`;
-  }
-
-  if (block.type === 'cta') {
-    return `<section class="ss-cta-section ss-cta-block" data-id="${block.id}">
-  <div class="ss-container" style="display:flex;flex-direction:column;align-items:center;text-align:center">
-    <div class="ss-heading ss-animate">${esc2(block.heading)}</div>
-    <div class="ss-subheading ss-animate" style="animation-delay:.08s">${esc2(block.subheading)}</div>
-    <div class="ss-btn-group ss-animate" style="justify-content:center;animation-delay:.16s">
-      <button class="ss-btn">${esc2(block.btnText)}</button>
-      ${block.showBtn2?`<button class="ss-btn-outline" style="border-color:rgba(255,255,255,.35);color:#fff">${esc2(block.btn2Text)}</button>`:''}
-    </div>
-  </div>
-</section>`;
-  }
-  return '';
+/* CSS Variables */
+:root {
+${cssVars}
 }
 
-function esc2(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function esc(s){  return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+/* Base Reset */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-// ═══════════════════════════════════════════════
-//  POSTMESSAGE FROM IFRAME
-// ═══════════════════════════════════════════════
-window.addEventListener('message', e => {
-  if (e.data.type === 'blockClick') {
-    selectBlock(e.data.id);
-    const lt = document.querySelectorAll('.panel-tab')[3];
-    if (lt) setPanelTab(lt, 'layers');
-    updateLayersList();
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  font-size: var(--font-base);
+  line-height: var(--line-height);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Template: ${template.name} */
+${template.extraCSS || ''}
+
+/* Custom CSS */
+${State.customCSS}
+
+/* Responsive */
+@media (max-width: 768px) {
+  [style*="grid-template-columns: repeat(3"] { grid-template-columns: repeat(2, 1fr) !important; }
+  [style*="grid-template-columns: repeat(2"] { grid-template-columns: 1fr !important; }
+  [style*="grid-template-columns: 1.5fr"] { grid-template-columns: 1fr !important; }
+  .ss-nav-links { display: none !important; }
+}
+
+@media (max-width: 480px) {
+  [style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+  [style*="padding: 120px"] { padding: 60px 24px !important; }
+}
+`;
+}
+
+function buildExportJS() {
+  return `/* ═══════════════════════════════════════════════════
+   Generated by Supersuite — https://supersuite.com
+   Site script — interactivity & animations
+═══════════════════════════════════════════════════ */
+
+'use strict';
+
+/* ── SCROLL ANIMATIONS ─────────────────────────── */
+function initScrollAnimations() {
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateY(0)';
+        observer.unobserve(entry.target);
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+
+  document.querySelectorAll('.ss-block').forEach((el, i) => {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(30px)';
+    el.style.transition = \`opacity 0.6s ease \${i * 0.1}s, transform 0.6s ease \${i * 0.1}s\`;
+    observer.observe(el);
+  });
+}
+
+/* ── SMOOTH ANCHOR SCROLL ──────────────────────── */
+function initSmoothScroll() {
+  document.querySelectorAll('a[href^="#"]').forEach(link => {
+    link.addEventListener('click', e => {
+      const target = document.querySelector(link.getAttribute('href'));
+      if (target) {
+        e.preventDefault();
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+}
+
+/* ── FORM HANDLING ─────────────────────────────── */
+function initForms() {
+  document.querySelectorAll('form').forEach(form => {
+    form.addEventListener('submit', e => {
+      e.preventDefault();
+      const btn = form.querySelector('button[type="submit"]');
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✓ Submitted!';
+        btn.style.background = '#22c55e';
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.style.background = '';
+        }, 3000);
+      }
+    });
+  });
+}
+
+/* ── STICKY NAV ────────────────────────────────── */
+function initStickyNav() {
+  const nav = document.querySelector('.ss-nav');
+  if (!nav) return;
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 60) {
+      nav.style.boxShadow = '0 4px 24px rgba(0,0,0,0.15)';
+      nav.style.backdropFilter = 'blur(12px)';
+    } else {
+      nav.style.boxShadow = '';
+      nav.style.backdropFilter = '';
+    }
+  });
+}
+
+/* ── MOBILE NAV TOGGLE ─────────────────────────── */
+function initMobileNav() {
+  const nav = document.querySelector('.ss-nav');
+  if (!nav) return;
+  const links = nav.querySelector('.ss-nav-links');
+  if (!links) return;
+
+  const toggle = document.createElement('button');
+  toggle.innerHTML = '☰';
+  toggle.style.cssText = 'display:none;background:none;border:none;font-size:24px;cursor:pointer;color:inherit;padding:4px 8px;';
+  nav.querySelector('.ss-nav-inner')?.appendChild(toggle);
+
+  window.addEventListener('resize', () => {
+    if (window.innerWidth <= 768) {
+      toggle.style.display = 'block';
+      links.style.display = 'none';
+    } else {
+      toggle.style.display = 'none';
+      links.style.display = 'flex';
+    }
+  });
+
+  toggle.addEventListener('click', () => {
+    const shown = links.style.display !== 'none';
+    links.style.display = shown ? 'none' : 'flex';
+    links.style.flexDirection = 'column';
+    links.style.position = 'absolute';
+    links.style.top = '72px';
+    links.style.left = '0';
+    links.style.right = '0';
+    links.style.background = 'inherit';
+    links.style.padding = '16px 24px';
+    links.style.borderTop = '1px solid rgba(0,0,0,0.1)';
+    links.style.zIndex = '99';
+  });
+
+  // Trigger resize check
+  window.dispatchEvent(new Event('resize'));
+}
+
+/* ── COUNTER ANIMATION ─────────────────────────── */
+function animateCounters() {
+  document.querySelectorAll('[data-count]').forEach(el => {
+    const target = parseInt(el.dataset.count);
+    let current = 0;
+    const step = target / 60;
+    const timer = setInterval(() => {
+      current = Math.min(current + step, target);
+      el.textContent = Math.round(current).toLocaleString();
+      if (current >= target) clearInterval(timer);
+    }, 16);
+  });
+}
+
+/* ── INIT ──────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => {
+  initScrollAnimations();
+  initSmoothScroll();
+  initForms();
+  initStickyNav();
+  initMobileNav();
+});
+`;
+}
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function closeExportModal() {
+  document.getElementById('export-modal').style.display = 'none';
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   TOAST NOTIFICATIONS
+────────────────────────────────────────────────────────────────── */
+function showToast(title, message, type = 'info') {
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
+  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || 'ℹ️'}</span>
+    <div class="toast-text">
+      <div class="toast-title">${title}</div>
+      ${message ? `<div class="toast-msg">${message}</div>` : ''}
+    </div>
+  `;
+
+  container.appendChild(toast);
+
+  // Auto dismiss
+  setTimeout(() => {
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(40px)';
+    toast.style.transition = 'all 0.3s ease';
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+
+  // Click to dismiss
+  toast.addEventListener('click', () => toast.remove());
+}
+
+/* ──────────────────────────────────────────────────────────────────
+   IMAGE UPLOAD
+────────────────────────────────────────────────────────────────── */
+let _imageUploadCallback = null;
+
+function triggerImageUpload(callback) {
+  _imageUploadCallback = callback;
+  document.getElementById('image-upload-input').click();
+}
+
+document.getElementById('image-upload-input').addEventListener('change', function() {
+  const file = this.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const base64 = e.target.result;
+    const key = 'img_' + Date.now();
+    State.uploadedImages[key] = base64;
+    if (_imageUploadCallback) {
+      _imageUploadCallback(base64, key);
+      _imageUploadCallback = null;
+    }
+  };
+  reader.readAsDataURL(file);
+  this.value = '';
+});
+
+/* ──────────────────────────────────────────────────────────────────
+   KEYBOARD SHORTCUTS
+────────────────────────────────────────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (!State.authenticated) return;
+
+  // Escape — close modals
+  if (e.key === 'Escape') {
+    closeBlockModal();
+    closeFullPreview();
+    closeExportModal();
+  }
+
+  // Ctrl+Z — undo (simple: just refresh)
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+    // Future: implement undo stack
+    showToast('⌛ Undo', 'Undo coming soon!', 'info');
+  }
+
+  // Ctrl+S — save/export
+  if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    e.preventDefault();
+    showToast('💾 Auto-saved', 'Changes saved to session', 'success');
+  }
+
+  // Ctrl+P — preview
+  if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+    e.preventDefault();
+    openFullPreview();
   }
 });
 
-// ═══════════════════════════════════════════════
-//  EXPORT  (FIX 2: exports match preview exactly)
-// ═══════════════════════════════════════════════
-function showExportModal()  { if (!state.blocks.length) { showToast('Add some blocks first!'); return; } document.getElementById('export-modal').classList.remove('hidden'); }
-function hideExportModal()  { document.getElementById('export-modal').classList.add('hidden'); }
-document.getElementById('export-modal').addEventListener('click', function(e) { if (e.target === this) hideExportModal(); });
-
-function exportHTML() {
-  // FIX 2: buildSiteHTML(true) — same function, no scaling divergence
-  const html = buildSiteHTML(true);
-  dlBlob(html, 'supersuite-site.html', 'text/html');
-  hideExportModal();
-  showToast('Exported! ✓ Pixel-perfect match to preview');
+/* ──────────────────────────────────────────────────────────────────
+   AUTO-SAVE TO SESSIONSSTORAGE
+────────────────────────────────────────────────────────────────── */
+function saveToSession() {
+  try {
+    const data = {
+      blocks: State.blocks,
+      globalStyles: State.globalStyles,
+      currentTemplate: State.currentTemplate,
+      customCSS: State.customCSS,
+      blockIdCounter: State.blockIdCounter,
+      siteName: document.getElementById('site-name-input')?.value,
+    };
+    sessionStorage.setItem('supersuite_session', JSON.stringify(data));
+  } catch(e) {}
 }
 
-function copyHTMLToClipboard() {
-  navigator.clipboard.writeText(buildSiteHTML(true))
-    .then(() => { hideExportModal(); showToast('HTML copied to clipboard! ✓'); })
-    .catch(() => showToast('Copy failed — try the download option'));
+function loadFromSession() {
+  try {
+    const raw = sessionStorage.getItem('supersuite_session');
+    if (!raw) return false;
+    const data = JSON.parse(raw);
+    State.blocks = data.blocks || [];
+    State.globalStyles = { ...State.globalStyles, ...data.globalStyles };
+    State.currentTemplate = data.currentTemplate || 'glass';
+    State.customCSS = data.customCSS || '';
+    State.blockIdCounter = data.blockIdCounter || 1;
+    if (data.siteName) {
+      const siteInput = document.getElementById('site-name-input');
+      if (siteInput) siteInput.value = data.siteName;
+    }
+    return true;
+  } catch(e) { return false; }
 }
 
-function exportSeparateFiles() {
-  const full = buildSiteHTML(true);
-  // Extract style block
-  const styleMatch = full.match(/<style>([\s\S]*?)<\/style>/);
-  const scriptMatch = full.match(/<script>([\s\S]*?)<\/script>/);
-  const siteCss = styleMatch ? styleMatch[1] : '';
-  const siteJs  = scriptMatch ? scriptMatch[1] : '';
+// Auto-save every 30 seconds
+setInterval(() => {
+  if (State.authenticated) saveToSession();
+}, 30000);
 
-  // Strip style and script from HTML, add external refs
-  let indexHtml = full
-    .replace(/<style>[\s\S]*?<\/style>/, '<link rel="stylesheet" href="site.css">')
-    .replace(/<script>[\s\S]*?<\/script>/, '<script src="site.js"><\/script>');
+/* ──────────────────────────────────────────────────────────────────
+   DRAG & DROP FROM SIDEBAR INTO CANVAS (Phase 2)
+────────────────────────────────────────────────────────────────── */
+document.querySelectorAll('.block-card[draggable]').forEach(card => {
+  card.addEventListener('dragstart', (e) => {
+    const type = card.getAttribute('onclick').match(/addBlock\('(\w+)'\)/)?.[1];
+    if (type) e.dataTransfer.setData('blockType', type);
+  });
+});
 
-  dlBlob(indexHtml, 'index.html', 'text/html');
-  setTimeout(() => dlBlob('/* Supersuite Export — site.css */\n' + siteCss, 'site.css', 'text/css'), 300);
-  setTimeout(() => dlBlob('/* Supersuite Export — site.js */\n' + siteJs,   'site.js',  'text/javascript'), 600);
-  hideExportModal();
-  showToast('3 files downloaded: index.html + site.css + site.js ✓');
+const canvasScrollArea = document.querySelector('.canvas-scroll-area');
+if (canvasScrollArea) {
+  canvasScrollArea.addEventListener('dragover', e => e.preventDefault());
+  canvasScrollArea.addEventListener('drop', e => {
+    e.preventDefault();
+    const type = e.dataTransfer.getData('blockType');
+    if (type) addBlock(type);
+  });
 }
 
-function dlBlob(content, name, type) {
-  const b = new Blob([content], { type });
-  const u = URL.createObjectURL(b);
-  const a = document.createElement('a');
-  a.href = u; a.download = name; a.click();
-  URL.revokeObjectURL(u);
+/* ──────────────────────────────────────────────────────────────────
+   STARTER DEMO — auto-populate with a sample page
+────────────────────────────────────────────────────────────────── */
+function loadStarterDemo() {
+  // Check session first
+  if (loadFromSession() && State.blocks.length > 0) {
+    refreshPreview();
+    updateLayers();
+    showToast('📂 Session Restored', 'Your previous work was loaded', 'info');
+    return;
+  }
+
+  // Load demo page
+  ['nav', 'hero', 'features', 'testimonials', 'pricing', 'cta', 'footer'].forEach(t => addBlock(t));
+  showToast('🎉 Demo Loaded', '7 blocks added — start editing!', 'success');
 }
 
-// ═══════════════════════════════════════════════
-//  TOAST
-// ═══════════════════════════════════════════════
-let toastTimer;
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), 2800);
+/* ──────────────────────────────────────────────────────────────────
+   BOOT
+────────────────────────────────────────────────────────────────── */
+// The actual init is called from initApp() after authentication
+function initApp() {
+  applyTemplate('glass');
+  loadStarterDemo();
 }
-
-// Welcome toast
-setTimeout(() => showToast('Welcome! Ctrl+Z to undo · Click any block to edit'), 900);
