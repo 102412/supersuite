@@ -11,6 +11,7 @@
 ────────────────────────────────────────────────────────────────── */
 const State = {
   authenticated: false,
+  userTier: 'free',        // SSV26.1: set by Auth.verify on login
   currentTemplate: 'glass',
   currentDevice: 'desktop',
   zoomLevel: 100,
@@ -677,24 +678,370 @@ function buildPreviewHTML(forExport = false) {
    CORE FUNCTIONS
 ────────────────────────────────────────────────────────────────── */
 
-// Password gate
+/* ══════════════════════════════════════════════════════════════════
+   SSV26.1 — AUTH SYSTEM
+   Structured for future swap to email/password (replace Auth.verify)
+   Tiers: free | basic | pro | agency
+══════════════════════════════════════════════════════════════════ */
+const Auth = {
+  // Version tag — bump on each release for future-proofing
+  version: 'SSV26.1',
+
+  // Access code → tier map. In SSV26.2+, replace with server-side lookup.
+  _codes: {
+    'SS26':     { tier: 'free',   label: 'Free Trial' },
+    'SSBASIC':  { tier: 'basic',  label: 'Basic'      },
+    'SSPRO':    { tier: 'pro',    label: 'Pro'         },
+    'SSAGENCY': { tier: 'agency', label: 'Agency'      },
+  },
+
+  // Tier definitions — update here for SSV26.2+ pricing changes
+  tiers: {
+    free:   { label: 'Free',   sitesPerWeek: 1,  sitesPerDay: 0,  sessionMinutes: 30,  weekly: true  },
+    basic:  { label: 'Basic',  sitesPerWeek: 0,  sitesPerDay: 1,  sessionMinutes: 60,  weekly: false },
+    pro:    { label: 'Pro',    sitesPerWeek: 0,  sitesPerDay: 3,  sessionMinutes: 180, weekly: false },
+    agency: { label: 'Agency', sitesPerWeek: 0,  sitesPerDay: 999,sessionMinutes: 9999,weekly: false },
+  },
+
+  /**
+   * verify(code) → { ok: bool, tier, label, error }
+   * Swap this function body for email/password in SSV26.2+
+   */
+  verify(code) {
+    const entry = this._codes[code.trim().toUpperCase()];
+    if (!entry) return { ok: false, error: 'Invalid access code. Check the table below.' };
+    return { ok: true, tier: entry.tier, label: entry.label };
+  },
+
+  /** Returns tier config object for a given tier key */
+  getTierConfig(tier) {
+    return this.tiers[tier] || this.tiers.free;
+  },
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   SSV26.1 — USAGE TRACKER
+   Tracks session time + site exports per day / per week.
+   Resets daily (midnight local). Weekly resets for Free tier.
+══════════════════════════════════════════════════════════════════ */
+const UsageTracker = {
+  _storageKey: 'ss_usage_v261',
+  _timerInterval: null,
+  _sessionStartMs: null,
+
+  /** Load or initialise usage record from localStorage */
+  _load() {
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return this._fresh();
+  },
+
+  _fresh() {
+    const now = new Date();
+    return {
+      date: now.toDateString(),          // daily reset key
+      week: this._weekKey(now),          // weekly reset key (Free tier)
+      sessionSeconds: 0,                 // cumulative seconds this day
+      exportsToday: 0,
+      exportsThisWeek: 0,
+      tier: 'free',
+    };
+  },
+
+  _weekKey(d) {
+    // ISO week number string for weekly reset
+    const date = new Date(+d);
+    date.setHours(0,0,0,0);
+    date.setDate(date.getDate() + 4 - (date.getDay() || 7));
+    const yearStart = new Date(date.getFullYear(),0,1);
+    return date.getFullYear() + '-W' + Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+  },
+
+  _save(record) {
+    try { localStorage.setItem(this._storageKey, JSON.stringify(record)); } catch(e) {}
+  },
+
+  /** Call after successful login to bind tier and reset if day changed */
+  init(tier) {
+    const now = new Date();
+    let record = this._load();
+
+    // Daily reset
+    if (record.date !== now.toDateString()) {
+      record.date = now.toDateString();
+      record.sessionSeconds = 0;
+      record.exportsToday = 0;
+    }
+
+    // Weekly reset (Free tier)
+    const wk = this._weekKey(now);
+    if (record.week !== wk) {
+      record.week = wk;
+      record.exportsThisWeek = 0;
+    }
+
+    record.tier = tier;
+    this._save(record);
+    this._sessionStartMs = Date.now();
+    this._startTimer(record);
+  },
+
+  /** Start the 1-second UI timer */
+  _startTimer(record) {
+    if (this._timerInterval) clearInterval(this._timerInterval);
+    let seconds = record.sessionSeconds;
+    const cfg = Auth.getTierConfig(record.tier);
+    const limitSec = cfg.sessionMinutes * 60;
+
+    this._timerInterval = setInterval(() => {
+      seconds++;
+      // Persist every 10s to avoid hammering storage
+      if (seconds % 10 === 0) {
+        const r = this._load();
+        r.sessionSeconds = seconds;
+        this._save(r);
+      }
+      this._updateTimerUI(seconds, limitSec);
+
+      // Enforce session time limit (non-agency)
+      if (record.tier !== 'agency' && seconds >= limitSec) {
+        clearInterval(this._timerInterval);
+        this._showLimitModal('session');
+      }
+    }, 1000);
+  },
+
+  _updateTimerUI(seconds, limitSec) {
+    const el = document.getElementById('nav-timer');
+    if (!el) return;
+    const mm = String(Math.floor(seconds / 60)).padStart(2, '0');
+    const ss = String(seconds % 60).padStart(2, '0');
+    el.textContent = mm + ':' + ss;
+    const remaining = limitSec - seconds;
+    el.classList.toggle('warning', remaining < 300 && remaining > 0);
+    el.classList.toggle('danger',  remaining < 60  && remaining > 0);
+  },
+
+  /**
+   * canExport() → bool
+   * Call before allowing "It's Go Time" download.
+   */
+  canExport() {
+    const r = this._load();
+    const cfg = Auth.getTierConfig(r.tier);
+    if (r.tier === 'agency') return true;
+    if (cfg.weekly) return r.exportsThisWeek < cfg.sitesPerWeek;
+    return r.exportsToday < cfg.sitesPerDay;
+  },
+
+  /** Call after a successful export */
+  recordExport() {
+    const r = this._load();
+    r.exportsToday++;
+    r.exportsThisWeek++;
+    this._save(r);
+  },
+
+  /** Show the usage limit modal with contextual copy */
+  _showLimitModal(type) {
+    const r = this._load();
+    const cfg = Auth.getTierConfig(r.tier);
+    const titleEl = document.getElementById('ulm-title');
+    const bodyEl  = document.getElementById('ulm-body');
+    const badgeEl = document.getElementById('ulm-tier-badge');
+
+    if (titleEl) titleEl.textContent = type === 'session'
+      ? `Session limit reached (${cfg.sessionMinutes} min)`
+      : `Export limit reached`;
+
+    if (bodyEl) bodyEl.textContent = type === 'session'
+      ? `Your ${cfg.label} plan allows ${cfg.sessionMinutes} minutes of builder time per day. Your session has ended. Come back tomorrow or upgrade your plan.`
+      : `Your ${cfg.label} plan allows ${cfg.weekly ? cfg.sitesPerWeek + ' site/week' : cfg.sitesPerDay + ' site(s)/day'}. Upgrade to continue exporting.`;
+
+    if (badgeEl) {
+      badgeEl.textContent = cfg.label;
+      badgeEl.className = 'lmt-tier lmt-' + r.tier;
+    }
+
+    const modal = document.getElementById('usage-limit-modal');
+    if (modal) modal.style.display = 'flex';
+  },
+
+  showExportLimitModal() { this._showLimitModal('export'); },
+};
+
+/* ══════════════════════════════════════════════════════════════════
+   SSV26.1 — LANDING PAGE FUNCTIONS
+══════════════════════════════════════════════════════════════════ */
+
+/** Open the login modal, optionally pre-scroll to pricing anchor */
+function openLoginModal(planHint) {
+  document.getElementById('login-modal').style.display = 'flex';
+  const input = document.getElementById('gate-input');
+  if (input) { input.value = ''; input.focus(); }
+  document.getElementById('gate-error').textContent = '';
+  document.getElementById('login-tier-hint').style.display = 'none';
+}
+
+function closeLoginModal() {
+  document.getElementById('login-modal').style.display = 'none';
+}
+
+/** Live-preview tier name as user types code */
+function previewTierFromCode(val) {
+  const result = Auth.verify(val);
+  const hint = document.getElementById('login-tier-hint');
+  if (!hint) return;
+  if (val.length >= 4 && result.ok) {
+    hint.style.display = 'flex';
+    hint.textContent = '✓ ' + result.label + ' plan detected';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
+/** FAQ accordion toggle */
+function toggleFaq(btn) {
+  const answer = btn.nextElementSibling;
+  const isOpen = answer.classList.contains('open');
+  // Close all
+  document.querySelectorAll('.lp-faq-a').forEach(a => a.classList.remove('open'));
+  document.querySelectorAll('.lp-faq-q').forEach(b => b.classList.remove('open'));
+  if (!isOpen) {
+    answer.classList.add('open');
+    btn.classList.add('open');
+  }
+}
+
+/** Mobile nav toggle */
+function toggleLpNav() {
+  const menu = document.getElementById('lp-nav-mobile');
+  if (menu) menu.classList.toggle('open');
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   SSV26.1 — BLOCK SELECTOR (Feature 6)
+   Tracks which block types the user wants visible in the library
+══════════════════════════════════════════════════════════════════ */
+const BlockSelector = {
+  _storageKey: 'ss_blockselector_v261',
+  // All known block types
+  _allTypes: ['nav','hero','leadform','testimonials','pricing','cta','features','gallery','footer'],
+
+  /** Returns array of currently enabled block types */
+  getEnabled() {
+    try {
+      const raw = localStorage.getItem(this._storageKey);
+      if (raw) return JSON.parse(raw);
+    } catch(e) {}
+    return [...this._allTypes]; // default: all enabled
+  },
+
+  save(enabledTypes) {
+    try { localStorage.setItem(this._storageKey, JSON.stringify(enabledTypes)); } catch(e) {}
+  },
+
+  /** Filter the sidebar block library to only show enabled blocks */
+  applyToSidebar() {
+    const enabled = this.getEnabled();
+    document.querySelectorAll('.block-card').forEach(card => {
+      // Derive type from onclick attribute
+      const match = card.getAttribute('onclick')?.match(/addBlock\('(\w+)'\)/);
+      if (!match) return;
+      const type = match[1];
+      card.style.display = enabled.includes(type) ? '' : 'none';
+    });
+  },
+};
+
+function openBlockSelectorModal() {
+  const enabled = BlockSelector.getEnabled();
+  const list = document.getElementById('block-selector-list');
+  if (!list) return;
+
+  const meta = {
+    nav:          { icon: '🧭', label: 'Navigation',       desc: 'Site header & menu' },
+    hero:         { icon: '⚡', label: 'Hero Section',     desc: 'Headline + CTA' },
+    leadform:     { icon: '📋', label: 'Lead Form',        desc: 'Capture leads' },
+    testimonials: { icon: '💬', label: 'Testimonials',     desc: 'Social proof cards' },
+    pricing:      { icon: '💎', label: 'Pricing / Services',desc: 'Plans & tiers' },
+    cta:          { icon: '🎯', label: 'CTA Section',      desc: 'Drive conversions' },
+    features:     { icon: '✨', label: 'Features',         desc: 'Icon + text grid' },
+    gallery:      { icon: '🖼️', label: 'Gallery',         desc: 'Image showcase' },
+    footer:       { icon: '📌', label: 'Footer',           desc: 'Links & copyright' },
+  };
+
+  list.innerHTML = BlockSelector._allTypes.map(type => {
+    const m = meta[type] || { icon: '◻', label: type, desc: '' };
+    const on = enabled.includes(type);
+    return `
+      <div class="bsl-item ${on?'enabled':''}" data-type="${type}" onclick="toggleBslItem(this)">
+        <div class="bsl-check">${on?'✓':''}</div>
+        <span class="bsl-icon">${m.icon}</span>
+        <div style="flex:1;">
+          <div class="bsl-label">${m.label}</div>
+          <div class="bsl-desc">${m.desc}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  document.getElementById('block-selector-modal').style.display = 'flex';
+}
+
+function toggleBslItem(el) {
+  el.classList.toggle('enabled');
+  const check = el.querySelector('.bsl-check');
+  if (check) check.textContent = el.classList.contains('enabled') ? '✓' : '';
+}
+
+function closeBlockSelectorModal() {
+  document.getElementById('block-selector-modal').style.display = 'none';
+}
+
+function saveBlockSelector() {
+  const enabled = [];
+  document.querySelectorAll('.bsl-item.enabled').forEach(el => {
+    enabled.push(el.dataset.type);
+  });
+  BlockSelector.save(enabled);
+  BlockSelector.applyToSidebar();
+  closeBlockSelectorModal();
+  showToast('✅ Block library updated', enabled.length + ' block types visible', 'success');
+}
+
+// ── Existing password gate function — now routes through Auth ──
 function checkPassword() {
   const input = document.getElementById('gate-input');
   const error = document.getElementById('gate-error');
   const val = input.value.trim();
+  const result = Auth.verify(val);
 
-  if (val === 'SS26') {
+  if (result.ok) {
     State.authenticated = true;
-    const gate = document.getElementById('password-gate');
-    gate.style.opacity = '0';
-    gate.style.transition = 'opacity 0.5s ease';
-    setTimeout(() => {
-      gate.style.display = 'none';
-      document.getElementById('app').style.display = 'flex';
-      initApp();
-    }, 500);
+    State.userTier = result.tier;
+
+    // Close login modal
+    closeLoginModal();
+
+    // Hide landing page, show builder app
+    const landing = document.getElementById('landing-page');
+    if (landing) {
+      landing.style.opacity = '0';
+      landing.style.transition = 'opacity 0.4s ease';
+      setTimeout(() => { landing.style.display = 'none'; }, 400);
+    }
+
+    const app = document.getElementById('app');
+    if (app) {
+      setTimeout(() => {
+        app.style.display = 'flex';
+        initApp();
+      }, 420);
+    }
   } else {
-    error.textContent = '❌ Invalid access code. Try again.';
+    error.textContent = '❌ ' + result.error;
     error.style.animation = 'none';
     requestAnimationFrame(() => { error.style.animation = 'shake 0.4s ease both'; });
     input.value = '';
@@ -702,17 +1049,35 @@ function checkPassword() {
   }
 }
 
-// Allow Enter key on password gate
-document.getElementById('gate-input').addEventListener('keydown', e => {
-  if (e.key === 'Enter') checkPassword();
+// Allow Enter key on login modal input
+document.addEventListener('keydown', function(e) {
+  const loginModal = document.getElementById('login-modal');
+  if (loginModal && loginModal.style.display !== 'none' && e.key === 'Enter') {
+    checkPassword();
+  }
 });
 
-// Initialize the app
+// Initialize the app after successful login
 function initApp() {
+  // ── SSV26.1: Wire tier badge in nav ──────────────────────
+  const tier = State.userTier || 'free';
+  const tierBadge = document.getElementById('nav-tier-badge');
+  if (tierBadge) {
+    const cfg = Auth.getTierConfig(tier);
+    tierBadge.textContent = cfg.label;
+    tierBadge.className = 'nav-tier-badge ' + tier;
+  }
+
+  // ── SSV26.1: Start usage tracker ─────────────────────────
+  UsageTracker.init(tier);
+
+  // ── SSV26.1: Apply block selector preferences ─────────────
+  BlockSelector.applyToSidebar();
+
+  // ── Existing startup sequence (unchanged) ─────────────────
   applyTemplate('glass');
-  refreshPreview();
-  updateLayers();
-  showToast('🎉 Welcome to Supersuite!', 'Investor Demo · Password: SS26', 'success');
+  loadStarterDemo();   // loads session or default demo blocks
+  showToast('🎉 Welcome to Supersuite!', Auth.getTierConfig(tier).label + ' plan · ' + Auth.version, 'success');
 }
 
 // Refresh the live preview iframe
@@ -1269,6 +1634,12 @@ function closeFullPreview() {
    EXPORT ENGINE
 ────────────────────────────────────────────────────────────────── */
 function exportSite() {
+  // SSV26.1: Enforce tier export limit before proceeding
+  if (!UsageTracker.canExport()) {
+    UsageTracker.showExportLimitModal();
+    return;
+  }
+
   const siteName = document.getElementById('site-name-input').value || 'my-site';
 
   // Build the export HTML (self-contained)
@@ -1280,6 +1651,9 @@ function exportSite() {
   downloadFile(siteName + '-index.html', exportHTML, 'text/html');
   setTimeout(() => downloadFile(siteName + '-style.css', exportCSS, 'text/css'), 200);
   setTimeout(() => downloadFile(siteName + '-script.js', exportJS, 'text/javascript'), 400);
+
+  // SSV26.1: Record this export against the usage counter
+  UsageTracker.recordExport();
 
   // Show success modal
   setTimeout(() => {
@@ -1306,6 +1680,8 @@ function buildExportHTML() {
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <title>${siteName}</title>
   <meta name="description" content="Built with Supersuite — the fastest website builder"/>
+  <!-- Favicon injected by Supersuite SSV26.1 -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23ff6b35'/%3E%3Ctext x='16' y='23' font-family='Arial Black,sans-serif' font-size='16' font-weight='900' text-anchor='middle' fill='white'%3ESS%3C/text%3E%3C/svg%3E"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,300&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
@@ -1597,24 +1973,29 @@ document.getElementById('image-upload-input').addEventListener('change', functio
    KEYBOARD SHORTCUTS
 ────────────────────────────────────────────────────────────────── */
 document.addEventListener('keydown', (e) => {
-  if (!State.authenticated) return;
-
-  // Escape — close modals
+  // SSV26.1: Escape closes login modal too
   if (e.key === 'Escape') {
-    closeBlockModal();
-    closeFullPreview();
-    closeExportModal();
+    closeLoginModal();
+    if (State.authenticated) {
+      closeBlockModal();
+      closeFullPreview();
+      closeExportModal();
+      closeBlockSelectorModal();
+    }
+    return;
   }
+
+  if (!State.authenticated) return;
 
   // Ctrl+Z — undo (simple: just refresh)
   if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
-    // Future: implement undo stack
     showToast('⌛ Undo', 'Undo coming soon!', 'info');
   }
 
-  // Ctrl+S — save/export
+  // Ctrl+S — save session
   if ((e.ctrlKey || e.metaKey) && e.key === 's') {
     e.preventDefault();
+    saveToSession();
     showToast('💾 Auto-saved', 'Changes saved to session', 'success');
   }
 
@@ -1689,7 +2070,7 @@ if (canvasScrollArea) {
    STARTER DEMO — auto-populate with a sample page
 ────────────────────────────────────────────────────────────────── */
 function loadStarterDemo() {
-  // Check session first
+  // Restore previous session first (preserves all user edits)
   if (loadFromSession() && State.blocks.length > 0) {
     refreshPreview();
     updateLayers();
@@ -1697,16 +2078,15 @@ function loadStarterDemo() {
     return;
   }
 
-  // Load demo page
-  ['nav', 'hero', 'features', 'testimonials', 'pricing', 'cta', 'footer'].forEach(t => addBlock(t));
-  showToast('🎉 Demo Loaded', '7 blocks added — start editing!', 'success');
+  // SSV26.1: Only add demo blocks that are enabled in BlockSelector
+  const enabled = BlockSelector.getEnabled();
+  const demoBlocks = ['nav', 'hero', 'features', 'testimonials', 'pricing', 'cta', 'footer'];
+  demoBlocks.filter(t => enabled.includes(t)).forEach(t => addBlock(t));
+  showToast('🎉 Demo Loaded', 'Start editing — all your blocks are ready!', 'success');
 }
 
 /* ──────────────────────────────────────────────────────────────────
    BOOT
+   initApp() is called by checkPassword() after successful login.
+   The duplicate stub below has been removed in SSV26.1.
 ────────────────────────────────────────────────────────────────── */
-// The actual init is called from initApp() after authentication
-function initApp() {
-  applyTemplate('glass');
-  loadStarterDemo();
-}
