@@ -739,6 +739,7 @@ const SS_PASSWORD_DB = {
     'SSAGENCY':    { note: 'Default agency test code' },
     'AGENCYLAUNCH':{ note: 'Agency founding client — batch A' },
     // ↓ Add agency codes below this line
+     'roasraz'
   },
 
 };
