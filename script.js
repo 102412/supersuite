@@ -679,43 +679,135 @@ function buildPreviewHTML(forExport = false) {
 ────────────────────────────────────────────────────────────────── */
 
 /* ══════════════════════════════════════════════════════════════════
-   SSV26.1 — AUTH SYSTEM
-   Structured for future swap to email/password (replace Auth.verify)
-   Tiers: free | basic | pro | agency
-══════════════════════════════════════════════════════════════════ */
-const Auth = {
-  // Version tag — bump on each release for future-proofing
-  version: 'SSV26.1',
+   SSV26.1 — AUTH SYSTEM & PASSWORD DATABASE
+   ─────────────────────────────────────────────────────────────────
+   HOW TO ADD A NEW USER:
+     Find the SS_PASSWORD_DB section for their tier and add one line:
+       'YOURCODE': { note: 'Who this is for' },
 
-  // Access code → tier map. In SSV26.2+, replace with server-side lookup.
-  _codes: {
-    'SS26':     { tier: 'free',   label: 'Free Trial' },
-    'SSBASIC':  { tier: 'basic',  label: 'Basic'      },
-    'SSPRO':    { tier: 'pro',    label: 'Pro'         },
-    'SSAGENCY': { tier: 'agency', label: 'Agency'      },
+   HOW TO MOVE A USER TO A DIFFERENT TIER:
+     Cut their entry from one tier block and paste it into another.
+
+   CODES ARE CASE-INSENSITIVE — 'mypro' and 'MYPRO' both work.
+
+   TO ADD A WHOLE NEW TIER in SSV26.2+:
+     1. Add a new block to SS_PASSWORD_DB
+     2. Add its limits to Auth.tiers
+     3. Add its CSS class to style.css (.nav-tier-badge.newtier)
+
+   SSV26.2+ UPGRADE PATH:
+     Replace Auth.verify() body with a fetch() to your backend.
+     SS_PASSWORD_DB can then move server-side. No other code changes.
+══════════════════════════════════════════════════════════════════ */
+
+/* ─────────────────────────────────────────────────────────────────
+   ★ PASSWORD DATABASE — EDIT THIS SECTION TO MANAGE USERS ★
+   Each entry: 'CODE': { note: 'description (for your reference)' }
+   Codes are matched case-insensitively.
+───────────────────────────────────────────────────────────────── */
+const SS_PASSWORD_DB = {
+
+  // ── FREE / TRIAL ───────────────────────────────────────────────
+  // Limits: 1 site per week · 30 min session per day
+  free: {
+    'SS26':      { note: 'Default public demo code' },
+    'TRYME':     { note: 'General trial invite' },
+    'FREETRIAL': { note: 'Marketing campaign — batch A' },
+    // ↓ Add free codes below this line
   },
 
-  // Tier definitions — update here for SSV26.2+ pricing changes
+  // ── BASIC ──────────────────────────────────────────────────────
+  // Limits: 1 site per day · 60 min session per day
+  basic: {
+    'SSBASIC':   { note: 'Default basic test code' },
+    'BASIC2026': { note: 'Basic launch cohort' },
+    // ↓ Add basic codes below this line
+  },
+
+  // ── PRO ────────────────────────────────────────────────────────
+  // Limits: 3 sites per day · 180 min session per day
+  pro: {
+    'SSPRO':       { note: 'Default pro test code' },
+    'PROLAUNCH':   { note: 'Pro early adopter — batch A' },
+    'BUILDFAST':   { note: 'Pro early adopter — batch B' },
+    // ↓ Add pro codes below this line
+  },
+
+  // ── AGENCY ─────────────────────────────────────────────────────
+  // Limits: Unlimited sites · Unlimited session time
+  agency: {
+    'SSAGENCY':    { note: 'Default agency test code' },
+    'AGENCYLAUNCH':{ note: 'Agency founding client — batch A' },
+    // ↓ Add agency codes below this line
+  },
+
+};
+/* ─────────────────────────────────────────────────────────────────
+   END OF PASSWORD DATABASE — do not edit below this line
+───────────────────────────────────────────────────────────────── */
+
+const Auth = {
+  version: 'SSV26.1',
+
+  // ── Tier limits — update here for SSV26.2+ pricing changes ─────
   tiers: {
-    free:   { label: 'Free',   sitesPerWeek: 1,  sitesPerDay: 0,  sessionMinutes: 30,  weekly: true  },
-    basic:  { label: 'Basic',  sitesPerWeek: 0,  sitesPerDay: 1,  sessionMinutes: 60,  weekly: false },
-    pro:    { label: 'Pro',    sitesPerWeek: 0,  sitesPerDay: 3,  sessionMinutes: 180, weekly: false },
-    agency: { label: 'Agency', sitesPerWeek: 0,  sitesPerDay: 999,sessionMinutes: 9999,weekly: false },
+    free:   { label: 'Free Trial', sitesPerWeek: 1,   sitesPerDay: 0,   sessionMinutes: 30,   weekly: true  },
+    basic:  { label: 'Basic',      sitesPerWeek: 0,   sitesPerDay: 1,   sessionMinutes: 60,   weekly: false },
+    pro:    { label: 'Pro',        sitesPerWeek: 0,   sitesPerDay: 3,   sessionMinutes: 180,  weekly: false },
+    agency: { label: 'Agency',     sitesPerWeek: 0,   sitesPerDay: 999, sessionMinutes: 9999, weekly: false },
   },
 
   /**
-   * verify(code) → { ok: bool, tier, label, error }
-   * Swap this function body for email/password in SSV26.2+
+   * verify(code) → { ok: bool, tier, label, note, error }
+   *
+   * Looks up the code across all tiers in SS_PASSWORD_DB.
+   * Case-insensitive. Returns the matched tier and its config.
+   *
+   * SSV26.2+ upgrade: replace this body with a fetch() call to your
+   * auth endpoint. The rest of the app reads only ok/tier/label.
    */
   verify(code) {
-    const entry = this._codes[code.trim().toUpperCase()];
-    if (!entry) return { ok: false, error: 'Invalid access code. Check the table below.' };
-    return { ok: true, tier: entry.tier, label: entry.label };
+    const normalised = code.trim().toUpperCase();
+    if (!normalised) return { ok: false, error: 'Please enter an access code.' };
+
+    // Walk every tier block in the database
+    for (const [tierKey, entries] of Object.entries(SS_PASSWORD_DB)) {
+      // Check every code in this tier (also case-insensitive keys)
+      for (const [dbCode, meta] of Object.entries(entries)) {
+        if (dbCode.toUpperCase() === normalised) {
+          const tierCfg = this.tiers[tierKey] || this.tiers.free;
+          return {
+            ok:    true,
+            tier:  tierKey,
+            label: tierCfg.label,
+            note:  meta.note || '',
+          };
+        }
+      }
+    }
+
+    return { ok: false, error: 'Invalid access code. Check your invite email or see plans below.' };
   },
 
-  /** Returns tier config object for a given tier key */
+  /** Returns the tier limits config object for a given tier key */
   getTierConfig(tier) {
     return this.tiers[tier] || this.tiers.free;
+  },
+
+  /**
+   * listCodes() — developer utility
+   * Call Auth.listCodes() in the browser console to audit all codes.
+   * Returns an array of { code, tier, note } for review.
+   */
+  listCodes() {
+    const out = [];
+    for (const [tier, entries] of Object.entries(SS_PASSWORD_DB)) {
+      for (const [code, meta] of Object.entries(entries)) {
+        out.push({ code, tier, label: this.tiers[tier]?.label || tier, note: meta.note });
+      }
+    }
+    console.table(out);
+    return out;
   },
 };
 
