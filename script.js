@@ -714,6 +714,7 @@ const SS_PASSWORD_DB = {
     'TRYME':     { note: 'General trial invite' },
     'FREETRIAL': { note: 'Marketing campaign — batch A' },
     // ↓ Add free codes below this line
+     'roasrye'
   },
 
   // ── BASIC ──────────────────────────────────────────────────────
