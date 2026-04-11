@@ -713,7 +713,6 @@ const SS_PASSWORD_DB = {
     'SS26':      { note: 'Default public demo code' },
     'TRYME':     { note: 'General trial invite' },
     'FREETRIAL': { note: 'Marketing campaign — batch A' },
-    'ROASRYE':   { note: 'My Personal Code' }
     // ↓ Add free codes below this line
   },
 
@@ -739,6 +738,7 @@ const SS_PASSWORD_DB = {
   agency: {
     'SSAGENCY':    { note: 'Default agency test code' },
     'AGENCYLAUNCH':{ note: 'Agency founding client — batch A' },
+    'ROASRYE':     { note: 'My Personal Code' }
     // ↓ Add agency codes below this line
   },
 
