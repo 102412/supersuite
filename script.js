@@ -713,7 +713,7 @@ const SS_PASSWORD_DB = {
     'SS26':      { note: 'Default public demo code' },
     'TRYME':     { note: 'General trial invite' },
     'FREETRIAL': { note: 'Marketing campaign — batch A' },
-   'ROASRYE'
+    'ROASRYE':   { note: 'My Personal Code' }
     // ↓ Add free codes below this line
   },
 
