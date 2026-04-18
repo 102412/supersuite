@@ -50,7 +50,7 @@ const SS_PASSWORD_DB = {
   free:   { SS26:     { note: 'Free trial access' } },
   basic:  { SSBASIC:  { note: 'Basic plan' } },
   pro:    { SSPRO:    { note: 'Pro plan' }, ROASRYE: { note: 'Dev access' } },
-  agency: { SSAGENCY: { note: 'Agency plan' } },
+  agency: { SSAGENCY: { note: 'Agency plan' }, roasryland: { note: 'Dev access' } },
 };
 
 /* ──────────────────────────────────────────────────────────────────
