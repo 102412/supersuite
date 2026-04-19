@@ -1072,7 +1072,7 @@ const SS_PASSWORD_DB = {
     'SSAGENCY':    { note: 'Default agency test code' },
     'AGENCYLAUNCH':{ note: 'Agency founding client — batch A' },
     'ROASRYE':     { note: 'My Personal Code' }
-    'POPPY':       { note: 'Poppy's Code' }
+    'POPPY':       { note: 'Poppy Code' }
     // ↓ Add agency codes below this line
   },
 
