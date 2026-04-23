@@ -1269,7 +1269,6 @@ const SS_PASSWORD_DB = {
     'AGENCYLAUNCH':{ note: 'Agency founding client — batch A' },
     'ROASRYE':     { note: 'My Personal Code' }
     // ↓ Add agency codes below this line
-    'MYPRO'
   },
 
 };
