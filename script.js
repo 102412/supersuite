@@ -1268,8 +1268,8 @@ const SS_PASSWORD_DB = {
     'SSAGENCY':    { note: 'Default agency test code' },
     'AGENCYLAUNCH':{ note: 'Agency founding client — batch A' },
     'ROASRYE':     { note: 'My Personal Code' }
-    'TEST1':     
     // ↓ Add agency codes below this line
+    'MYPRO'
   },
 
 };
