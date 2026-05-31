@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Supersuite Builder",
+  "version": "27.1.0",
+  "description": "Supersuite no-code site builder (SSV27.1 — Phase 2: Onboarding, AI Hub, Mobile, Launch Page).",
+  "icons": { "48": "icon.png", "128": "icon.png" },
+  "action": {
+    "default_title": "Open Supersuite",
+    "default_icon": "icon.png"
+  },
+  "background": { "service_worker": "ss-bg.js" },
+  "permissions": ["tabs", "storage"],
+  "host_permissions": ["<all_urls>"]
+}

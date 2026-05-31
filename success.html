@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Supersuite — You're In 🎉</title>
+  <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#09090d;color:#f4f4f8;font-family:'DM Sans',sans-serif;-webkit-font-smoothing:antialiased}
+    body{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:24px;overflow-x:hidden}
+
+    /* bg */
+    .bg{position:fixed;inset:0;z-index:0;pointer-events:none}
+    .bg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:60px 60px;mask-image:radial-gradient(ellipse at center,#000 30%,transparent 75%)}
+    .bg-glow{position:absolute;width:700px;height:700px;border-radius:50%;filter:blur(130px)}
+    .bg-glow-1{background:#ff6b35;top:-250px;left:-250px;opacity:.2}
+    .bg-glow-2{background:#ffd166;bottom:-250px;right:-250px;opacity:.1}
+
+    /* card */
+    .card{position:relative;z-index:1;width:min(520px,100%);background:linear-gradient(180deg,#1c1c26,#14141e);border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:40px 36px;box-shadow:0 40px 100px rgba(0,0,0,.6);text-align:center}
+    .card::before{content:'';position:absolute;top:0;left:20px;right:20px;height:1px;background:linear-gradient(90deg,transparent,rgba(255,107,53,.6),transparent)}
+
+    /* success icon */
+    .icon{width:72px;height:72px;border-radius:20px;background:linear-gradient(135deg,#ff6b35,#ff8c5a);margin:0 auto 22px;display:flex;align-items:center;justify-content:center;font-size:32px;box-shadow:0 12px 40px rgba(255,107,53,.45);animation:pop .5s cubic-bezier(.34,1.56,.64,1)}
+    @keyframes pop{from{opacity:0;transform:scale(.6)}to{opacity:1;transform:scale(1)}}
+
+    .eyebrow{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.25em;color:#ff6b35;text-transform:uppercase;margin-bottom:10px}
+    h1{font-family:'Syne',sans-serif;font-size:30px;font-weight:800;letter-spacing:-0.02em;line-height:1.1;margin-bottom:10px}
+    .sub{color:#8888a8;font-size:14px;line-height:1.6;margin-bottom:28px}
+
+    /* code box */
+    .code-wrap{background:#09090d;border:1px dashed rgba(255,107,53,.4);border-radius:14px;padding:20px 20px 14px;margin-bottom:10px}
+    .code-label{font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.2em;color:#6666aa;text-transform:uppercase;margin-bottom:10px}
+    .code-val{font-family:'JetBrains Mono',monospace;font-size:26px;letter-spacing:4px;color:#ff8c5a;font-weight:700;word-break:break-all}
+    .code-hint{font-size:12px;color:#6666aa;margin-top:8px}
+
+    /* buttons */
+    .btn-row{display:flex;gap:10px;margin-top:14px}
+    .btn{flex:1;padding:13px 16px;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;border:0;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+    .btn-copy{background:rgba(255,255,255,.08);color:#f4f4f8;border:1px solid rgba(255,255,255,.12)}
+    .btn-copy:hover{background:rgba(255,255,255,.14)}
+    .btn-primary{background:linear-gradient(135deg,#ff6b35,#ff4500);color:#fff;box-shadow:0 6px 20px rgba(255,107,53,.35)}
+    .btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(255,107,53,.45)}
+    .btn-primary:disabled{opacity:.6;cursor:wait;transform:none}
+
+    /* steps */
+    .steps{margin-top:28px;display:flex;flex-direction:column;gap:10px;text-align:left}
+    .step{display:flex;gap:14px;align-items:flex-start;padding:12px 14px;background:rgba(255,255,255,.03);border-radius:10px;border:1px solid rgba(255,255,255,.06)}
+    .step-num{width:26px;height:26px;border-radius:6px;background:rgba(255,107,53,.15);color:#ff8c5a;font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .step-text{font-size:13.5px;color:#b4b4c8;line-height:1.5}
+    .step-text strong{color:#f4f4f8}
+
+    /* status */
+    .status{font-family:'JetBrains Mono',monospace;font-size:11px;color:#4ade80;letter-spacing:.08em;margin-top:6px;display:flex;align-items:center;justify-content:center;gap:6px}
+    .status-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:blink 1.5s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+    .footer-note{margin-top:24px;font-size:12px;color:#4a4a6a;line-height:1.5}
+    .footer-note a{color:#6666aa;text-decoration:none}
+    .footer-note a:hover{color:#b4b4c8}
+
+    /* loading state */
+    .loading{opacity:.5;pointer-events:none}
+    .spinner{width:20px;height:20px;border:2px solid rgba(255,255,255,.2);border-top-color:#ff6b35;border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+    @keyframes spin{to{transform:rotate(360deg)}}
+  </style>
+</head>
+<body>
+  <div class="bg">
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+  </div>
+
+  <div class="card" id="main-card">
+    <div class="icon">🎉</div>
+    <div class="eyebrow">Payment Confirmed</div>
+    <h1>You're in.<br>Welcome to Supersuite.</h1>
+    <p class="sub">Your unique access code is below. Copy it — you'll need it to enter the builder. Your Supersuite download starts automatically.</p>
+
+    <div class="code-wrap">
+      <div class="code-label">Your One-Time Access Code</div>
+      <div class="code-val" id="code-display">Generating…</div>
+      <div class="code-hint">This code is valid for one site export. Keep it safe.</div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-copy" id="copy-btn" onclick="copyCode()" disabled>Copy Code</button>
+      <button class="btn btn-primary" id="open-btn" onclick="openBuilder()" disabled>
+        Open Supersuite →
+      </button>
+    </div>
+
+    <div class="status" id="status-line">
+      <div class="spinner"></div>
+      <span id="status-text">Generating your code…</span>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text"><strong>Copy your code above</strong> — or click "Open Supersuite" to auto-fill it</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text"><strong>Click "Enter Access Code"</strong> on the Supersuite landing page and paste your code</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text"><strong>Build your site</strong> — AI onboarding designs it for you in 60 seconds</div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text"><strong>Export when ready</strong> — downloads raw HTML/CSS/JS. Your code is used up, your site is yours forever</div>
+      </div>
+    </div>
+
+    <p class="footer-note">
+      Questions? Email <a href="mailto:support@supersuite.app">support@supersuite.app</a><br>
+      <a href="index.html">← Back to Supersuite</a>
+    </p>
+  </div>
+
+  <script>
+  (function(){
+    const SB_URL = 'https://xcsypbpmiqmwfujrdjvb.supabase.co';
+    const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhjc3lwYnBtaXFtd2Z1anJkanZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxMDU0NjQsImV4cCI6MjA5NDY4MTQ2NH0.07Bk0YSYySfRAGdlvX50nFXtE9T9cgDdD9t2sHhQyPc';
+
+    let generatedCode = null;
+
+    // ── Determine tier from URL params ──────────────────────────
+    function getTier(){
+      const p = new URLSearchParams(window.location.search);
+      const t = (p.get('tier') || p.get('plan') || 'single').toLowerCase();
+      if (t.includes('agency')) return 'agency';
+      if (t.includes('pro'))    return 'pro';
+      return 'single';
+    }
+
+    // ── Generate a unique SS code ───────────────────────────────
+    function mintCode(tier){
+      const prefix = tier === 'agency' ? 'SSA' : tier === 'pro' ? 'SSP' : 'SS';
+      const chars  = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let rand = '';
+      for (let i=0; i<4; i++) rand += chars[Math.floor(Math.random()*chars.length)];
+      let rand2 = '';
+      for (let i=0; i<4; i++) rand2 += chars[Math.floor(Math.random()*chars.length)];
+      return prefix + '-' + rand + '-' + rand2;
+    }
+
+    // ── Store code in Supabase ──────────────────────────────────
+    async function storeCode(code, tier, email){
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+      try {
+        await fetch(SB_URL + '/rest/v1/access_codes', {
+          method: 'POST',
+          headers: {
+            'apikey': SB_KEY,
+            'Authorization': 'Bearer ' + SB_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates'
+          },
+          body: JSON.stringify({
+            code,
+            tier,
+            email:      email || null,
+            issued_at:  new Date().toISOString(),
+            expires_at: expiresAt,
+            used:       false,
+            source:     'gumroad'
+          })
+        });
+
+        // Also log the user if we have their email
+        if (email) {
+          await fetch(SB_URL + '/rest/v1/users', {
+            method: 'POST',
+            headers: {
+              'apikey': SB_KEY,
+              'Authorization': 'Bearer ' + SB_KEY,
+              'Content-Type': 'application/json',
+              'Prefer': 'resolution=merge-duplicates'
+            },
+            body: JSON.stringify({
+              email,
+              tier,
+              joined_at: new Date().toISOString(),
+              last_seen: new Date().toISOString(),
+              code,
+              sites_count: 0,
+              exports_count: 0
+            })
+          });
+        }
+      } catch(e) {
+        console.warn('Supabase store failed (code still works locally):', e);
+      }
+    }
+
+    // ── Update UI ───────────────────────────────────────────────
+    function setStatus(text, done){
+      document.getElementById('status-text').textContent = text;
+      const dot = document.querySelector('.spinner');
+      if (done && dot) {
+        dot.style.display = 'none';
+        const greenDot = document.createElement('div');
+        greenDot.className = 'status-dot';
+        dot.parentNode.insertBefore(greenDot, dot);
+        document.getElementById('status-line').style.color = '#4ade80';
+      }
+    }
+
+    // ── Copy code ───────────────────────────────────────────────
+    window.copyCode = function(){
+      if (!generatedCode) return;
+      navigator.clipboard.writeText(generatedCode).then(() => {
+        const btn = document.getElementById('copy-btn');
+        btn.textContent = 'Copied ✓';
+        setTimeout(() => btn.textContent = 'Copy Code', 2000);
+      });
+    };
+
+    // ── Open builder with code pre-filled ───────────────────────
+    window.openBuilder = function(){
+      if (!generatedCode) return;
+      // Store in sessionStorage so builder can auto-fill it
+      sessionStorage.setItem('ss_prefill_code', generatedCode);
+      window.location.href = 'index.html?code=' + encodeURIComponent(generatedCode);
+    };
+
+    // ── Get Gumroad email from URL if passed ─────────────────────
+    function getEmail(){
+      const p = new URLSearchParams(window.location.search);
+      return p.get('email') || p.get('buyer_email') || '';
+    }
+
+    // ── Main boot ───────────────────────────────────────────────
+    async function boot(){
+      const tier  = getTier();
+      const email = getEmail();
+      const code  = mintCode(tier);
+      generatedCode = code;
+
+      // Show code immediately
+      document.getElementById('code-display').textContent = code;
+      setStatus('Saving your code…', false);
+
+      // Store in Supabase
+      await storeCode(code, tier, email);
+      setStatus('Code ready — you\'re all set!', true);
+
+      // Enable buttons
+      document.getElementById('copy-btn').disabled = false;
+      document.getElementById('open-btn').disabled = false;
+
+      // Also store in localStorage so the builder can validate it
+      try {
+        const existing = JSON.parse(localStorage.getItem('ss_generated_codes_v1') || '{}');
+        existing[code] = {
+          tier,
+          note:      'Purchased via Gumroad',
+          issuedAt:  Date.now(),
+          expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
+          owner:     email
+        };
+        localStorage.setItem('ss_generated_codes_v1', JSON.stringify(existing));
+      } catch(e) {}
+    }
+
+    boot();
+  })();
+  </script>
+</body>
+</html>
